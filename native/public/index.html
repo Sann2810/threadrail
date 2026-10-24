@@ -1,0 +1,13 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="threadrail-local" content="1"><title>ThreadRail Local</title><link rel="stylesheet" href="/style.css"></head><body>
+<aside><div class="brand">≋ <strong>ThreadRail</strong><span>Local</span></div><p class="muted">Codex · Claude Code</p>
+<div class="sources"><button id="connect-codex">Connect Codex</button><button id="connect-claude">Connect Claude Code</button></div>
+<label class="scope"><input id="all-projects" type="checkbox"> All projects</label><p id="scope-note" class="muted">This project · Saved text only</p>
+<div id="source-status" role="status"></div><div id="sessions" aria-label="Saved sessions"></div><button id="more" hidden>More sessions</button>
+<button id="index-sessions" disabled>Index listed sessions</button><button id="stop-index" hidden>Stop indexing</button><p id="coverage" class="muted">Connect a source to begin.</p>
+<details class="help"><summary>How it works</summary><p>Read saved sessions locally. Nothing is sent to an AI service. Refresh a session to read newer saved messages.</p><p>Passage jumps happen in this viewer. The stock desktop app and terminal do not expose a verified exact-passage jump here.</p></details></aside>
+<div class="workspace"><header><input id="query" type="search" aria-label="Search saved sessions" placeholder="What do you remember?" maxlength="800" autocomplete="off"><span id="search-status" role="status"></span></header>
+<section id="results" aria-label="Session search results" hidden><div id="best"></div><div id="words"></div></section>
+<div class="session-bar"><div><h1 id="session-title">Your place, across sessions.</h1><span id="session-meta" class="muted">Choose a saved session to read it.</span></div><div class="session-actions"><button id="refresh-session" disabled>Refresh</button><button id="resume-command" disabled>Copy resume command</button></div></div>
+<main id="transcript" tabindex="0" aria-label="Session transcript"><div class="empty">The rail and thread search appear here when you open a session.<br>Use the search above to find passages across indexed sessions.</div></main>
+<div id="notice" role="status" hidden></div><div id="error" role="alert" hidden></div></div>
+<script src="/dist/threadrail.js" defer></script><script src="/dist/native-app.js" type="module"></script></body></html>

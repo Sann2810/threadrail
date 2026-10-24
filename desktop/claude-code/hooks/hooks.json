@@ -1,0 +1,4 @@
+{
+  "description": "Adds ThreadRail controls; reads this session and scrolls original messages only on user clicks. Does not change prompts, tools, permissions or model requests.",
+  "modules": ["./register.js"]
+}

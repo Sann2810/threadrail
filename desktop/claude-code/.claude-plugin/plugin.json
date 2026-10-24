@@ -1,0 +1,6 @@
+{
+  "name": "threadrail",
+  "version": "1.7.0",
+  "description": "Conversation rail and private search inside Claude Code, with original-message navigation.",
+  "author": { "name": "ThreadRail" }
+}

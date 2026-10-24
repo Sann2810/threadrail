@@ -1,0 +1,11 @@
+{
+  "name": "threadrail-local",
+  "owner": { "name": "ThreadRail" },
+  "metadata": { "description": "Local native ThreadRail integrations built from this checkout.", "version": "1.7.0" },
+  "plugins": [{
+    "name": "threadrail",
+    "source": "./claude-code",
+    "version": "1.7.0",
+    "description": "Native Claude Code conversation rail and private local search."
+  }]
+}

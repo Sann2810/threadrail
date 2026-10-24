@@ -1,0 +1,10 @@
+node_modules/
+dist/
+release/
+test-results/
+playwright-report/
+.DS_Store
+models/
+desktop/claude-code/hooks/register.js
+desktop/claude-code/backend/
+desktop/claude-code/models/

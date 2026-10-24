@@ -1,0 +1,18 @@
+// Synthetic content only. Structure follows the live DOM inspected on 2026-10-15.
+export function providerFixture(provider, { count = 8, generic = false, messages } = {}) {
+  count = messages?.length ?? count;
+  let turns = '';
+  for (let i = 0; i < count; i++) {
+    const prompt = messages?.[i].prompt ?? `Question ${i + 1}: Explain idea ${i + 1} in plain language.`;
+    const answer = messages?.[i].answer ?? `<div class="response"><p>Answer ${i + 1}. This is a local test response.</p><p>One completed question and answer are one exchange.</p></div>`;
+    if (provider === 'chatgpt') turns += `<div data-turn-key="turn-${i}"><div data-talvt-turn-state="complete"><div class="user" data-chatgpt-search-unit-key="turn-${i}:0:user" data-chatgpt-search-message-ids="u-${i}"><div data-user-message-bubble="true">${prompt}</div></div><div class="assistant" data-chatgpt-search-unit-key="turn-${i}:1:assistant"><h4 class="sr-only" data-conversation-role="assistant">Assistant</h4>${answer}</div></div></div>`;
+    else if (provider === 'claude') turns += `<div data-testid="transcript-row" data-perf-row="human"><div class="user" data-testid="user-message">${prompt}</div></div><div data-testid="transcript-row" data-perf-row="assistant" data-perf-row-streaming="false"><div class="assistant" data-testid="assistant-message" data-is-streaming="false"><div class="font-claude-response">${answer}</div></div></div>`;
+    else if (provider === 'gemini') turns += `<div class="conversation-container" id="turn-${i}"><user-query class="user"><div class="query-text"><h5 class="cdk-visually-hidden"><span>You said</span></h5><p class="query-text-line">${prompt}</p></div><button aria-label="Copy prompt">Copy prompt</button></user-query><model-response class="assistant"><message-content>${answer}</message-content><button aria-label="Copy">Copy</button></model-response></div>`;
+    else turns += `<article><div class="question user" ${generic ? 'data-role="user"' : ''}>${prompt}</div><div class="answer assistant done" ${generic ? 'data-role="assistant" data-message-status="complete"' : ''}>${answer}</div></article>`;
+  }
+  if (provider === 'claude') turns = `<div data-testid="transcript-list">${turns}</div>`;
+  const heading = provider === 'claude'
+    ? '<div data-testid="chat-header" style="position:absolute;inset:0 0 auto;height:60px;z-index:1;background:#171819;display:flex;align-items:center;padding-left:24px">claude fixture</div>'
+    : `<header>${provider} fixture</header>`;
+  return `<!doctype html><html><head><meta name="color-scheme" content="dark"><title>ThreadRail ${provider} test</title><style>body{margin:0;background:#171819;color:#eee;font:16px system-ui}main{height:100vh;display:flex;flex-direction:column}header{height:60px;flex-shrink:0;padding-left:24px;display:flex;align-items:center}#scroll{flex:1;overflow-y:auto;padding:${provider === 'claude' ? 80 : 20}px 72px 100px 24px}.user{display:block;padding:18px;background:#303039;border-radius:15px;margin-bottom:24px}.assistant{display:block;margin-bottom:40px}.response{min-height:400px;line-height:1.8}.sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%)}button{color:inherit;background:#272733;border:0;padding:8px;border-radius:6px}form{height:70px;flex-shrink:0;padding-left:24px}input{background:#303039;color:inherit;border:0;padding:14px;width:80%;border-radius:20px}</style></head><body><main>${heading}<div id="scroll">${turns}</div><form><input aria-label="Message" placeholder="Message"></form></main><script>requestAnimationFrame(()=>{const s=document.querySelector('#scroll');s.scrollTop=s.scrollHeight;});</script></body></html>`;
+}

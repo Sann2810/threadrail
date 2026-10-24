@@ -1,0 +1,29 @@
+{
+  "name": "threadrail",
+  "version": "1.6.12",
+  "private": true,
+  "type": "module",
+  "description": "Private conversation navigation across AI chat websites.",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "test": "node --test tests/*.test.js && playwright test",
+    "test:unit": "node --test tests/*.test.js",
+    "test:browser": "playwright test",
+    "demo": "node scripts/serve.mjs",
+    "package": "npm run build && node scripts/package.mjs",
+    "prepare:model": "node scripts/prepare-model.mjs",
+    "native": "node native/server.mjs",
+    "package:native": "npm run build && node scripts/package-native.mjs",
+    "build:claude-code": "node scripts/build-claude-mod.mjs",
+    "test:claude-code": "npm run build:claude-code && claude plugin validate desktop/claude-code && claude plugin test desktop/claude-code && node --test tests/claude-mod.test.js",
+    "install:claude-code": "npm run build:claude-code && node scripts/install-claude-mod.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.56.0",
+    "esbuild": "^0.25.0"
+  },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "0.3.301",
+    "@huggingface/transformers": "4.3.1"
+  }
+}

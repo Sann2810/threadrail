@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>ThreadRail · All chats</title><link rel="stylesheet" href="extension.css"></head>
+<body class="library">
+<header><span class="logo">≋</span><strong>ThreadRail</strong><span class="version">ALL CHATS</span></header>
+<main>
+<h1>Find a conversation.</h1>
+
+<label class="sr-only" for="query">Describe what you remember</label><input id="query" type="search" placeholder="What do you remember?" maxlength="800" autocomplete="off" spellcheck="false">
+<div class="library-tools"><button id="scan" class="secondary">Add chats</button><button id="stop" class="secondary" hidden>Stop</button><a class="text-button" href="diagnostics.html" target="_blank">Test search</a><span id="coverage"></span></div>
+<p id="scan-status" role="status"></p><p id="search-status" role="status" aria-live="polite"></p><p id="error" class="error" role="alert"></p>
+<section id="results" aria-label="Search results"><section id="best" aria-label="Smart matches"></section><section id="words" aria-label="Word matches"></section></section>
+<section id="empty" class="library-empty"><h2>No saved chats yet.</h2><p>Chats you open are saved on this device. To add more, open a chat site with its chat list visible, then choose <strong>Add chats</strong>.</p><p>Older or collapsed messages may be missing.</p></section>
+<details class="library-manage"><summary id="manage-title">Saved on this device</summary><div id="chat-list"></div></details>
+<footer><label class="save-setting"><input id="saving" type="checkbox"> Save opened chats on this device</label><span>Local snapshots may include older versions of edited or deleted messages. Only your browser profile can access this library. Removing a saved item here does not change the original chat.</span><button id="clear" class="text-button">Clear library</button><div id="clear-confirm" hidden><p>Remove all local chat text and search vectors, and pause saving?</p><button id="confirm-clear" class="primary">Clear and pause</button><button id="cancel-clear" class="secondary">Keep library</button></div></footer>
+</main><script type="module" src="library.js"></script></body></html>

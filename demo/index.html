@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="dark"><title>ThreadRail · Find your place, faster.</title>
+  <link rel="stylesheet" href="/demo/style.css">
+</head>
+<body>
+  <aside class="guide">
+    <a class="wordmark" href="/"><span class="brand-icon">≋</span> ThreadRail <span class="tag">DEMO</span></a>
+    <div class="guide-copy"><span class="eyebrow">LESS SCROLLING. MORE CONTEXT.</span><h1>Pick up where<br>you left off.</h1><p>A quiet little rail for very long conversations.</p></div>
+    <div class="steps">
+      <div><span>01</span><p><strong>Scroll into your history</strong>The rail appears along the right edge.</p></div>
+      <div><span>02</span><p><strong>Find a familiar question</strong>Tap a marker to preview your original words.</p></div>
+      <div><span>03</span><p><strong>Jump back into the thought</strong>Select the preview, or hold a marker to jump.</p></div>
+    </div>
+    <button id="explore" class="explore">Try the rail <span>↗</span></button>
+    <div class="scenarios"><label for="scenario">Explore a conversation</label><select id="scenario"><option value="normal">A week of ideas</option><option value="long">An unusually long answer</option><option value="streaming">A response in progress</option><option value="dense">200 exchanges</option><option value="single">Just getting started</option></select></div>
+    <div class="privacy"><span class="privacy-dot"></span> Local by design. Your words stay yours.</div>
+    <small>This is a local test conversation. The extension adds only the navigation layer to ChatGPT.</small>
+  </aside>
+  <main>
+    <header><div class="chat-title">ChatGPT <span>⌄</span></div><span class="conversation-name">Designing a learning routine</span><button id="reset" aria-label="Reset demo conversation">↺</button></header>
+    <div id="scroller"><div id="conversation"></div><div class="end-space"></div></div>
+    <form id="composer"><div class="compose-box"><button type="button" aria-label="Add an attachment">＋</button><input aria-label="Message ChatGPT" placeholder="Ask a follow-up to try a new exchange…"><button class="send" aria-label="Send message" type="submit">↑</button></div><div class="demo-note">Interactive demo · Replies are local examples</div></form>
+  </main>
+  <script src="/demo/fixture.js"></script>
+  <script src="/dist/threadrail.js"></script>
+</body>
+</html>

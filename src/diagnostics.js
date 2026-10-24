@@ -62,7 +62,7 @@ $('#tests').onsubmit=async event=>{
     startedAt:new Date().toISOString(),state:'running',rounds:2,total:tests.length*2,results:[]};render();
   try{
     await chrome.storage.local.set({diagnosticPlan:{cases:tests}});await saveReport();
-    const owner=await chrome.tabs.getCurrent();({token}=await send('begin',{owner:owner.id}));check();
+    const owner=await chrome.tabs.getCurrent();if(!owner?.id)throw Error('Open diagnostics in a tab.');({token}=await send('begin',{owner:owner.id}));check();
     for(const round of [1,2]){
       check();$('#status').textContent=`Round ${round}/2 · Loading saved chats…`;
       const saved=savedChatOrder(await allChats()),sources=archiveSources(saved),index=new SearchIndex(SEARCH_MODEL),client=new EmbeddingClient();

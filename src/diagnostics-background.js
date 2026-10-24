@@ -47,7 +47,7 @@ export function installDiagnostics({readyMessage,allowedURL}){
         const verify=()=>readyMessage(tab.id,{type:'threadrail:archive-verify',target,expectedPassage:expected},15000,()=>run.cancelled);
         const first=await verify();await pause(400);const second=await verify();
         const stable=first.ok&&second.ok&&Math.abs(first.top-second.top)<3;
-        return {ok:!!stable,reason:!second.ok?second.reason:!first.ok?first.reason:!stable?'Passage moved after landing':undefined,
+        return {ok:!!stable,reason:!second.ok?second.reason??second.error:!first.ok?first.reason??first.error:!stable?'Passage moved after landing':undefined,
           first,second};
       }finally{
         run.tabs.delete(tab.id);try{await chrome.tabs.remove(tab.id);}catch{}await persist();

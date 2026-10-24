@@ -72,7 +72,9 @@ export class ConversationAdapter {
       for(const block of element.querySelectorAll(selector)){
         if(block.querySelector(selector))continue;
         const value=this.text(block);if(!value)continue;
-        let start=text.indexOf(value,cursor);if(start<0)start=text.indexOf(value);
+        // Search forward only: rewinding would map a repeated paragraph to its
+        // earlier copy and shift every later block with it.
+        const start=text.indexOf(value,cursor);
         if(start>=0){ranges.push([start,start+value.length]);cursor=start+value.length;}
       }
     }

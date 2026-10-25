@@ -128,3 +128,32 @@ test('a changed source cannot be reported as a successful saved-passage test',as
     expect(report.results.every(row=>!row.ok)).toBe(true);expect(report.results[0].reason).toMatch(/restored|changed/);
   }finally{await f.close();}
 });
+
+test('verification rejects an edit elsewhere in the same answer even when the exact gold quote remains visible',async()=>{
+  test.setTimeout(90000);const f=await fixture();
+  try{
+    const page=f.originals[0];await page.bringToFront();
+    const worker=f.context.serviceWorkers()[0],url=f.tests[0].expectedChatURL,expectedPassage=f.tests[0].expectedPassage;
+    const evidence=await worker.evaluate(async({url,expectedPassage})=>{
+      const db=await new Promise(resolve=>{const r=indexedDB.open('threadrail-library');r.onsuccess=()=>resolve(r.result);});
+      const chat=await new Promise(resolve=>{const r=db.transaction('chats').objectStore('chats').get(url);r.onsuccess=()=>resolve(r.result);});db.close();
+      const source=chat.messages.find(m=>m.role==='answer'&&m.text.includes(expectedPassage)),[tab]=await chrome.tabs.query({active:true,currentWindow:true});
+      const target={chatURL:url,role:source.role,nativeId:source.nativeId,messageKey:source.key,sourceText:source.text,matchText:expectedPassage,matchOffset:source.text.indexOf(expectedPassage)};
+      const jump=await chrome.tabs.sendMessage(tab.id,{type:'threadrail:archive-jump',target});
+      const first=await chrome.tabs.sendMessage(tab.id,{type:'threadrail:archive-verify',target,expectedPassage});
+      return {jump,first,target,tabId:tab.id};
+    },{url,expectedPassage});
+    expect(evidence.jump.ok).toBe(true);expect(evidence.first.ok).toBe(true);
+    await page.locator('#remembered').evaluate(node=>{node.closest('.assistant').querySelector('p').append(' A real change to the answer.');});
+    const second=await worker.evaluate(({tabId,target,expectedPassage})=>chrome.tabs.sendMessage(tabId,{type:'threadrail:archive-verify',target,expectedPassage}),{...evidence,expectedPassage});
+    expect(second.ok).toBe(false);expect(second.reason).toBe('Original message text changed');
+    expect(second.sourceIdentity).toBe(true);expect(second.sourceUnchanged).toBe(false);
+    expect(second.currentFingerprint).not.toBe(second.savedFingerprint);
+    await page.locator('#remembered').evaluate(node=>{
+      const source=node.closest('.assistant');source.querySelector('p').textContent='Books lined the quiet reading room.';
+      source.closest('[data-turn-key]').dataset.turnKey='a-different-original-message';
+    });
+    const identity=await worker.evaluate(({tabId,target,expectedPassage})=>chrome.tabs.sendMessage(tabId,{type:'threadrail:archive-verify',target,expectedPassage}),{...evidence,expectedPassage});
+    expect(identity.ok).toBe(false);expect(identity.sourceIdentity).toBe(false);expect(identity.reason).toBe('Original message was not restored');
+  }finally{await f.close();}
+});

@@ -1,3 +1,4 @@
+import {messageText,sourceEvidence} from './message-text.js';
 import { PROFILES } from './profiles.js';
 
 export function visible(element) {
@@ -5,9 +6,7 @@ export function visible(element) {
 }
 
 export function cleanText(element) {
-  const copy = element.cloneNode(true);
-  copy.querySelectorAll('button, nav, script, style, [role="toolbar"], [aria-hidden="true"], .sr-only, .cdk-visually-hidden, .visually-hidden, .screen-reader-only, [data-markdown-copy="exclude"]').forEach(node => node.remove());
-  return copy.textContent.replace(/\s+/g, ' ').trim();
+  return messageText(element);
 }
 
 export class ConversationAdapter {
@@ -62,6 +61,8 @@ export class ConversationAdapter {
     this.textCache.set(element, { raw, text });
     return text;
   }
+
+  sourceEvidence(element,saved){return sourceEvidence(element,saved,this.text(element));}
 
   blockRanges(element,text=this.text(element)) {
     const cached=this.blockCache.get(element);
@@ -177,9 +178,9 @@ export class ConversationAdapter {
         const expanded = !current.classList.contains('collapsed');
         if (expanded && stable >= 3 && performance.now() - began >= 150) resolve(current);
         else if (performance.now() - began > 1500) resolve(null);
-        else requestAnimationFrame(settled);
+        else setTimeout(settled,40);
       };
-      requestAnimationFrame(settled);
+      setTimeout(settled,40);
     });
   }
 

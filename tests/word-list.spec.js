@@ -16,14 +16,14 @@ for(const provider of ['chatgpt','claude','gemini'])test(`${provider}: every que
     await context.route(`${origin}/**`,route=>route.fulfill({body:providerFixture(provider,{messages}),contentType:'text/html'}));
     const page=await context.newPage();await page.goto(origin+{chatgpt:'/c/singing',claude:'/chat/singing',gemini:'/app/singing'}[provider]);
     await expect(page.locator('threadrail-navigation')).toHaveAttribute('data-exchange-count','3');
-    await page.keyboard.press('Alt+Shift+f');await page.locator('.search-input').fill('how to sing');
-    await expect(page.locator('.search-word-label')).toHaveText(['how','to','sing']);
+    await page.keyboard.press('Alt+Shift+f');await page.locator('.search-input').fill('how to start next sing');
+    await expect(page.locator('.search-word-label')).toHaveText(['start','next','sing']);
     await expect(page.locator('.word-toggle .word-tag-count')).toHaveText(['1','1','2']);
     await expect(page.locator('.search-words .search-result')).toHaveCount(0);
     const buttons=page.locator('.word-toggle'),rects=await buttons.evaluateAll(elements=>elements.map(el=>{const r=el.getBoundingClientRect();return{x:r.x,y:r.y,bottom:r.bottom};}));
     expect(rects[0].x).toBe(rects[1].x);expect(rects[1].x).toBe(rects[2].x);
     expect(rects[1].y).toBeGreaterThan(rects[0].bottom);expect(rects[2].y).toBeGreaterThan(rects[1].bottom);
-    const how=await expandWord(page,'how');await expect(how.locator('.search-result')).toHaveCount(1);
+    const how=await expandWord(page,'start');await expect(how.locator('.search-result')).toHaveCount(1);
     const howBottom=(await how.boundingBox()).y+(await how.boundingBox()).height;
     expect((await buttons.nth(1).boundingBox()).y).toBeGreaterThan(howBottom);
     // Keyboard can collapse the word row, and another row expands independently.

@@ -48,8 +48,8 @@ test('word groups exhaust both roles in conversation order, including query word
   sources.push({...source('block','Zen met Rey.'),isPassage:true});
   index.sync(sources);
   const groups=index.keywordGroups('Zen san REY were off to a trip Zen');
-  assert.deepEqual(groups.map(group=>group.word),['zen','san','rey','were','off','to','a','trip']);
-  assert.deepEqual(groups.map(group=>group.label),['Zen','san','REY','were','off','to','a','trip']);
+  assert.deepEqual(groups.map(group=>group.word),['zen','san','rey','trip']);
+  assert.deepEqual(groups.map(group=>group.label),['Zen','san','REY','trip']);
   assert.equal(groups[0].results.length,26);
   assert.deepEqual(groups[0].results.map(result=>result.id),['word:zen:first',...Array.from({length:25},(_,i)=>`word:zen:a${i}`)]);
   assert.equal(groups[1].results[0].role,'prompt');
@@ -75,15 +75,16 @@ test('word forms find singing and plural variants once per message with exact so
   const sources=[source('p','How to practise?','prompt'),source('a','Singing, singing and sings all refer to the same activity.'),source('b','Sing a note.'),source('c','A single string was used in Singapore.'),source('d','Running laps and planning trips.')];
   index.sync(sources);
   const groups=index.keywordGroups('how to sing');
-  assert.deepEqual(groups.map(g=>g.word),['how','to','sing']);
-  assert.deepEqual(groups.map(g=>g.results.length),[1,2,2]);
-  assert.deepEqual(groups[2].results.map(r=>r.sourceId??r.id),['word:sing:a','word:sing:b']);
-  for(const result of groups[2].results){
+  assert.deepEqual(groups.map(g=>g.word),['sing']);
+  assert.deepEqual(groups.map(g=>g.results.length),[2]);
+  assert.deepEqual(index.keywordGroups('how to').map(g=>g.word),['how','to']);
+  assert.deepEqual(groups[0].results.map(r=>r.sourceId??r.id),['word:sing:a','word:sing:b']);
+  for(const result of groups[0].results){
     const matched=result.matchText.slice(result.highlightStart,result.highlightStart+result.highlightLength);
     assert.ok(['Singing','Sing'].includes(matched));
     assert.equal(result.sourceText.slice(result.matchOffset+result.highlightStart,result.matchOffset+result.highlightStart+result.highlightLength),matched);
   }
-  assert.deepEqual(index.keywordGroups('singing')[0].results.map(r=>r.sourceText),groups[2].results.map(r=>r.sourceText));
+  assert.deepEqual(index.keywordGroups('singing')[0].results.map(r=>r.sourceText),groups[0].results.map(r=>r.sourceText));
   assert.equal(index.keywordGroups('run')[0].results.length,1);
   assert.equal(index.keywordGroups('trip')[0].results.length,1);
   index.sync([source('a','The activity ended.')]);assert.equal(index.keywordGroups('sing')[0].results.length,0);

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "ThreadRail \u2014 Conversation Navigation",
-  "version": "1.6.12",
+  "version": "1.6.13",
   "description": "Private conversation navigation for ChatGPT, Claude, Gemini, and other chat websites you enable.",
   "permissions": [
     "activeTab",

@@ -288,6 +288,12 @@ export class RailUI {
     this.toast.querySelector('span').textContent = text;
     this.toast.hidden = false;
     const button=this.shadow.querySelector('.toast-action');button.hidden=!action;button.textContent=action??'';button.onclick=onAction??null;
+    // Never cover what a jump just highlighted: drop to the bottom instead.
+    this.toast.style.top='';this.toast.style.bottom='';
+    if(!this.highlight.hidden){
+      const a=this.toast.getBoundingClientRect(),b=this.highlight.getBoundingClientRect();
+      if(a.bottom>b.top&&a.top<b.bottom&&a.right>b.left&&a.left<b.right){this.toast.style.top='auto';this.toast.style.bottom='24px';}
+    }
     if(!persistent)this.toastTimer = setTimeout(() => { this.toast.hidden = true; }, 3500);
   }
 

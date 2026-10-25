@@ -48,7 +48,7 @@ for(const provider of ['chatgpt','claude','gemini'])test(`${provider}: legacy ca
     await page.keyboard.press('Alt+Shift+f');await page.locator('.search-input').fill('orchid');
     let group=await expandWord(page,'orchid');
     while(await group.getByRole('button',{name:'More orchid matches'}).count())await group.getByRole('button',{name:'More orchid matches'}).click();
-    const expected=Array.from({length:20},(_,i)=>[`Orchid input ${i}.`,`Orchid answer ${i}.Closing notes.`]).flat();
+    const expected=Array.from({length:20},(_,i)=>[`Orchid input ${i}.`,`Orchid answer ${i}. Closing notes.`]).flat();
     expect(await group.locator('.search-excerpt').allTextContents()).toEqual(expected);
     await expect.poll(async()=>{
       const saved=await records(context.serviceWorkers()[0]);return saved.map(m=>m.text);

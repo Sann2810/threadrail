@@ -10,7 +10,7 @@ test('All chats keeps every cached provider message in order after reopening and
   const directory=await mkdtemp(resolve(tmpdir(),'threadrail-library-order-')),extension=resolve('dist');
   const launch=()=>chromium.launchPersistentContext(directory,{channel:'chromium',headless:true,reducedMotion:'reduce',viewport:{width:1280,height:900},args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
   const scenes=[['chatgpt','https://chatgpt.com/c/library-order'],['claude','https://claude.ai/chat/library-order'],['gemini','https://gemini.google.com/app/library-order']];
-  const expected=scenes.flatMap(([provider])=>Array.from({length:20},(_,i)=>[`${provider} Orchid input ${i}.`,`${provider} Orchid answer ${i}.Closing notes.`]).flat());
+  const expected=scenes.flatMap(([provider])=>Array.from({length:20},(_,i)=>[`${provider} Orchid input ${i}.`,`${provider} Orchid answer ${i}. Closing notes.`]).flat());
   let context=await launch(),small=false;
   const route=async()=>{
     for(const [provider,url]of scenes){
@@ -59,7 +59,7 @@ test('All chats keeps every cached provider message in order after reopening and
     let group=await expandAll(library);
     for(const [provider,url]of scenes){
       for(const i of [0,19]){
-        const selected=group.locator('.library-result').filter({hasText:`${provider} Orchid answer ${i}.Closing notes.`});
+        const selected=group.locator('.library-result').filter({hasText:`${provider} Orchid answer ${i}. Closing notes.`});
         const opened=context.waitForEvent('page');await selected.click();const destination=await opened;
         await expect(destination).toHaveURL(url);
         await expect(destination.locator('.toast')).toContainText('matching passage',{timeout:20000});

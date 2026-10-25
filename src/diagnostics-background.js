@@ -43,7 +43,7 @@ export function installDiagnostics({readyMessage,allowedURL}){
       try{
         await chrome.tabs.update(tab.id,{url});
         const jumped=await readyMessage(tab.id,{type:'threadrail:archive-jump',target},15000,()=>run.cancelled);
-        if(!jumped?.ok)throw Error(jumped?.error??'The saved passage could not be restored.');
+        if(!jumped?.ok)return {ok:false,reason:jumped?.reason??jumped?.error??'The saved passage could not be restored.',restoration:jumped};
         const verify=()=>readyMessage(tab.id,{type:'threadrail:archive-verify',target,expectedPassage:expected},15000,()=>run.cancelled);
         const first=await verify();await pause(400);const second=await verify();
         const stable=first.ok&&second.ok&&Math.abs(first.top-second.top)<3;

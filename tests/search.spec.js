@@ -130,6 +130,9 @@ test('search stays within a narrow viewport and its icon has a visible, separate
   await page.goto('/');await expect(page.locator('threadrail-navigation')).toHaveCount(1);
   await page.locator('#scroller').evaluate(e=>e.scrollTop=10);
   await expect(page.locator('.search-trigger')).toBeVisible();
+  // Search is available at the latest answer too; wait for the navigation
+  // control itself before measuring its geometry after the scroll update.
+  await expect(page.locator('.top')).toBeVisible();
   const icon=await page.locator('.search-trigger').boundingBox();const top=await page.locator('.top').boundingBox();
   expect(icon.x+icon.width).toBeLessThan(top.x);
   await page.locator('.search-trigger').click();
@@ -153,7 +156,7 @@ test('word tags expose every matching message chronologically and jump to a late
   await expect(page.locator('threadrail-navigation')).toHaveAttribute('data-exchange-count','33');
   await page.keyboard.press('Alt+Shift+F');await page.locator('.search-input').fill('Zen San Rey were off to a trip');
   await expect(page.locator('.search-panel')).toHaveAttribute('data-phase','fallback');
-  await expect(page.locator('.search-word-label')).toHaveText(['Zen','San','Rey','were','off','to','a','trip']);
+  await expect(page.locator('.search-word-label')).toHaveText(['Zen','San','Rey','trip']);
   const zen=await expandWord(page,'Zen');
   await expect(zen.locator('.search-count')).toHaveText('23');
   await expect(zen.locator('.search-result')).toHaveCount(2);

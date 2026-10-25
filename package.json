@@ -1,6 +1,6 @@
 {
   "name": "threadrail",
-  "version": "1.6.12",
+  "version": "1.6.13",
   "private": true,
   "type": "module",
   "description": "Private conversation navigation across AI chat websites.",

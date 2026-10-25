@@ -105,7 +105,11 @@ export class SearchIndex {
   }
   keywordGroups(query) {
     const seen = new Set();
-    const groups=[...query.matchAll(/[\p{L}\p{N}_][\p{L}\p{N}\p{M}_]*/gu)].flatMap(match => {
+    const matches=[...query.matchAll(/[\p{L}\p{N}_][\p{L}\p{N}\p{M}_]*/gu)];
+    // Filler words (how, to, the…) match nearly every message; list them only
+    // when the query contains nothing else.
+    const content=matches.filter(match=>!STOP.has(match[0].toLocaleLowerCase().normalize('NFKC')));
+    const groups=(content.length?content:matches).flatMap(match => {
       const word = match[0].toLocaleLowerCase().normalize('NFKC');
       if (seen.has(word)) return [];
       seen.add(word);

@@ -37,7 +37,7 @@ for(const provider of ['chatgpt','claude','gemini']) test(`${provider}: 200 exch
       while(await group.getByRole('button',{name:`More ${word} matches`,exact:true}).count()) await group.getByRole('button',{name:`More ${word} matches`,exact:true}).click();
       return group;
     };
-    await open();await expect(page.locator('.search-word-label')).toHaveText(['Zen','San','Rey','were','off','to','a','trip']);
+    await open();await expect(page.locator('.search-word-label')).toHaveText(['Zen','San','Rey','trip']);
     for(const word of words){
       const group=await expand(word);
       await expect(group.locator('.search-count')).toHaveText(String(expected[word].length));

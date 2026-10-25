@@ -14,7 +14,12 @@ export async function startCompanion({port=4187,project=process.cwd(),providers=
     const headers={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Content-Security-Policy':"default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; frame-ancestors 'none'; object-src 'none'"};
     const json=(status,value)=>{res.writeHead(status,{...headers,'Content-Type':'application/json'});res.end(JSON.stringify(value));};
     try{
-      if(req.headers.host!==new URL(origin).host || (req.headers.origin&&req.headers.origin!==origin)){json(403,{error:'Local origin required.'});return;}
+      // The session cookie belongs to 127.0.0.1, so send localhost visits there.
+      // Only the path is kept; a crafted request URL can't redirect elsewhere.
+      if(req.method==='GET'&&req.headers.host===`localhost:${new URL(origin).port}`){
+        const target=new URL(req.url,'http://local');res.writeHead(302,{...headers,Location:`${origin}${target.pathname}${target.search}`});res.end();return;
+      }
+      if(req.headers.host!==new URL(origin).host || (req.headers.origin&&req.headers.origin!==origin)){json(403,{error:`Local origin required. Open ${origin}/`});return;}
       const url=new URL(req.url,origin);
       if(url.pathname.startsWith('/api/')){
         const cookie=req.headers.cookie?.split(';').map(s=>s.trim()).find(s=>s.startsWith('threadrail='))?.slice(11);

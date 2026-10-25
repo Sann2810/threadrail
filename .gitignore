@@ -8,3 +8,6 @@ models/
 desktop/claude-code/hooks/register.js
 desktop/claude-code/backend/
 desktop/claude-code/models/
+
+# Personal live test plans and reports stay local.
+diagnostics/*.json

@@ -1,3 +1,4 @@
+import {settleScroll} from './scroll-landing.js';
 import { ArchiveCollector } from './archive-collector.js';
 import {chatURL} from './archive-model.js';
 import {ThreadHistory} from './thread-history.js';
@@ -15,6 +16,7 @@ import { RailUI } from './rail-ui.js';
 class ThreadRail {
   constructor(profile) {
     this.profile = profile;
+    this.createdAt=performance.now();
     this.adapter = new ConversationAdapter(profile);
     this.abort = new AbortController();
     const signal = this.abort.signal;
@@ -195,6 +197,7 @@ class ThreadRail {
 
   measure(fromScroll = false) {
     this.ui.setSearchAvailable(!!this.root&&!!this.scroller&&this.searchSources.some(source=>source.element?.isConnected));
+    if(this.jumpFrame&&this.state===State.JUMPING&&(!this.root||!this.scroller))return;
     if(this.archive.finding){this.setState(State.JUMPING);if(this.scroller)this.ui.layout(this.adapter.viewport(this.scroller));return;}
     if (!this.scroller || !this.root || (this.exchanges.length < 2 && this.state !== State.SEARCH) || !this.exchanges.length) {
       // Search can open before history hydrates or while answers fail to load.
@@ -453,6 +456,7 @@ class ThreadRail {
 
   async jumpSearch(result) {
     result=passageTarget(result);
+    const restoring=result.restored||performance.now()-this.createdAt<3000;
     if(result.messageKey){
       const current=this.searchSources.find(s=>s.messageKey===result.messageKey);
       if(current&&current.sourceText!==result.sourceText){
@@ -482,19 +486,45 @@ class ThreadRail {
       this.ui.announce('Expand the matching message, then search again.'); return;
     }
     result = {...result,element:revealed};
-    const exchange = this.exchanges.find(item => item.id === (result.liveExchangeId??result.exchangeId));
-    if (!this.scroller) return;
-    // First reveal the turn, which materializes content-visibility on ChatGPT.
-    const jumpId = exchange?.id ?? null;
-    this.startJump(jumpId, () => exchange ? this.destination(exchange)
-      : result.element.getBoundingClientRect().top - this.adapter.viewport(this.scroller).top + this.scroller.scrollTop - this.inset, () => {
-      const range = passageRange(result.element,result.matchText ?? result.text,result.matchOffset ?? result.offset);
-      if (!range) { this.ui.highlightElement(result.element); this.ui.announce('Jumped to the matching message'); return; }
-      this.startJump(jumpId, () => {
-        const rect = range.getBoundingClientRect();
-        return rect.top - this.adapter.viewport(this.scroller).top + this.scroller.scrollTop - this.inset;
-      }, () => {this.ui.highlightElement(range);this.ui.announce('Jumped to the matching passage');});
-    });
+    if (!this.scroller) return {ok:false,reason:'No conversation scroller'};
+    // First materialize content-visibility, then track a fresh text range on
+    // every sample. A Range or element captured before a host remount is stale.
+    const locate=()=>{
+      const source=this.archive.matching(result,true,false);
+      if(source&&source.sourceText!==result.sourceText&&!this.adapter.sourceEvidence(source.element,result.sourceText).unchanged)throw Error('Original message text changed');
+      return source;
+    };
+    const initialRange=passageRange(result.element,result.matchText??result.text,result.matchOffset??result.offset);
+    const initialRect=initialRange?.getBoundingClientRect();
+    const needsMaterialization=!initialRect?.width||!initialRect?.height||result.element.checkVisibility?.({contentVisibilityAuto:true})===false;
+    if(needsMaterialization){
+      const turn=await this.startJump(null,()=>{
+        const source=locate();
+        if(!source?.element?.isConnected)return null;
+        return this.adapter.anchor(source.element).getBoundingClientRect().top-this.adapter.viewport(this.scroller).top+this.scroller.scrollTop-this.inset;
+      });
+      if(!turn.ok){if(!this.destroyed&&turn.reason!=='Jump cancelled')this.ui.announce(turn.reason);return turn;}
+    }
+    let landedRange;
+    const landing=await this.startJump(null,()=>{
+      const source=locate();
+      if(!source?.element?.isConnected)return null;
+      const range=passageRange(source.element,result.matchText??result.text,source.matchOffset);
+      if(!range)return null;
+      landedRange=range;
+      const rect=range.getBoundingClientRect(),viewport=this.adapter.viewport(this.scroller);
+      this.inset=this.adapter.headerInset(this.root,viewport);
+      // When the passage sits at the very start of its message, include the
+      // message's label and edge too instead of cutting them off at the top.
+      const start=this.adapter.anchor(source.element).getBoundingClientRect().top;
+      const top=rect.top-start>=0&&rect.top-start<=64?start:rect.top;
+      return {top:top-viewport.top+this.scroller.scrollTop-this.inset,element:source.element,
+        geometry:[rect.top,rect.bottom,rect.left,rect.right,viewport.top,viewport.bottom,this.inset],
+        ready:rect.width>0&&rect.height>0&&document.fonts?.status!=='loading'&&!this.adapter.historyLoading(this.root,this.scroller)};
+    },undefined,restoring?{minimum:1200,quiet:650}:{minimum:350,quiet:200});
+    if(landing.ok){this.ui.highlightElement(landedRange);this.ui.announce('Jumped to the matching passage');}
+    else if(!this.destroyed&&landing.reason!=='Jump cancelled')this.ui.announce(landing.reason);
+    return landing;
   }
 
   loadSearchHistory() {
@@ -589,44 +619,30 @@ class ThreadRail {
       () => this.ui.announce('Jumped to the latest message'));
   }
 
-  startJump(id, target, arrived) {
+  startJump(id, target, arrived, options={}) {
     this.closeSearch();
     this.cancelJump();
     clearTimeout(this.idleTimer);
     this.ui.closePreview();
     this.setState(State.JUMPING);
-    this.jumpId = id;
-    const reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
-    const max = () => Math.max(0, this.scroller.scrollHeight - this.scroller.clientHeight);
-    let top = clamp(target(), 0, max());
-    const scroller = this.scroller;
-    scroller.scrollTo({ top, behavior: reduced ? 'instant' : 'smooth' });
-    const began = performance.now();
-    let stableFrames = 0;
-    let previous = scroller.scrollTop;
-    let corrections = 0;
-    const monitor = () => {
-      const elapsed = performance.now() - began;
-      stableFrames = Math.abs(previous - scroller.scrollTop) < .5 ? stableFrames + 1 : 0;
-      previous = scroller.scrollTop;
-      const destination = clamp(target(), 0, max());
-      const reached = Math.abs(scroller.scrollTop - destination) < 3;
-      if (!reached && Math.abs(top - destination) > 3 && stableFrames > 2 && corrections < 3 && elapsed < 2200) {
-        top = destination;
-        corrections++;
-        stableFrames = 0;
-        scroller.scrollTo({ top, behavior: reduced ? 'instant' : 'smooth' });
-      }
-      if ((reached && stableFrames > 2) || (elapsed > 350 && stableFrames > 8) || elapsed > 2400) {
-        this.jumpFrame = null;
-        this.jumpId = null;
-        this.setState(State.NAVIGATING);
-        this.measure();
-        arrived();
-        this.armIdle();
-      } else this.jumpFrame = requestAnimationFrame(monitor);
-    };
-    this.jumpFrame = requestAnimationFrame(monitor);
+    this.jumpId=id;
+    const transaction=new AbortController();
+    this.jumpFrame=transaction;
+    const smooth=!matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const promise=settleScroll({...options,signal:transaction.signal,read:()=>{
+      if(this.destroyed)throw Error('Conversation closed');
+      const value=target();
+      if(value===null||value===undefined)return null;
+      return {scroller:this.scroller,smooth,...(typeof value==='number'?{top:value}:value)};
+    }}).then(async outcome=>{
+      if(this.jumpFrame!==transaction)return {ok:false,reason:'Jump cancelled'};
+      this.jumpFrame=null;this.jumpId=null;this.jumpPromise=null;
+      this.setState(State.NAVIGATING);this.measure();this.armIdle();
+      try{if(outcome.ok&&arrived)await arrived();return outcome;}
+      catch(error){return {ok:false,reason:`Jump failed: ${error.message}`};}
+    });
+    this.jumpPromise=promise;
+    return promise;
   }
 
   cancelJump() {
@@ -634,10 +650,11 @@ class ThreadRail {
     this.topTimer = null;
     this.ui.setTopLoading(false);
     if (this.jumpFrame) {
-      cancelAnimationFrame(this.jumpFrame);
+      this.jumpFrame.abort();
       this.scroller?.scrollTo({ top: this.scroller.scrollTop, behavior: 'instant' });
       this.jumpFrame = null;
     }
+    this.jumpPromise=null;
     this.jumpId = null;
   }
 

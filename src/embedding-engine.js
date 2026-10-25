@@ -39,8 +39,13 @@ export function embeddings(texts, base, priority=0) {
     }
     try {
       const model = await extractor;
-      const output = await model(missing, { pooling: SEARCH_MODEL.pooling, normalize: true, truncation: true, max_length: 256 });
-      output.tolist().forEach((vector,i)=>{if(vectors.size>=8192)vectors.delete(vectors.keys().next().value);vectors.set(missing[i],vector);result.set(missing[i],vector);});
+      // One text per model call: padding to a batch's longest text shifts the
+      // values slightly, so a text must get the same vector whatever else is
+      // embedded with it. Exact rechecks of compressed vectors rely on this.
+      for (const text of missing) {
+        const [vector] = (await model([text], { pooling: SEARCH_MODEL.pooling, normalize: true, truncation: true, max_length: 256 })).tolist();
+        if(vectors.size>=8192)vectors.delete(vectors.keys().next().value);vectors.set(text,vector);result.set(text,vector);
+      }
       return texts.map(text=>result.get(text));
     } catch (error) { extractor = null; throw error; }
   },priority);

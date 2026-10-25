@@ -29,14 +29,16 @@ export function installArchiveMessages() {
       if(message.type==='threadrail:library-thread'){
         if(!sender.tab||sender.tab.incognito)return {chat:null,vectors:[]};
         const url=await allowedURL(sender.url);
-        return {chat:await readChat(url),vectors:await readVectors(url)};
+        // Messaging is JSON: send the stored compressed bytes as a plain array.
+        return {chat:await readChat(url),vectors:(await readVectors(url)).map(record=>({...record,q:Array.from(record.q)}))};
       }
       if(message.type==='threadrail:library-thread-vectors'){
         if(!sender.tab||sender.tab.incognito)return {skipped:true};
         const {libraryPaused=false}=await chrome.storage.local.get('libraryPaused');if(libraryPaused)return {skipped:true};
         const url=await allowedURL(sender.url),documents=message.documents;
         if(!Array.isArray(documents)||documents.length>8||documents.some(d=>typeof d.id!=='string'||!d.id.startsWith(`${url}::`)||typeof d.embeddingText!=='string'||d.embeddingText.length>20000||d.embeddingVersion!==SEARCH_MODEL.embeddingVersion||!Array.isArray(d.vector)||d.vector.length!==384||d.vector.some(n=>!Number.isFinite(n))||!Number.isFinite(d.savedAt)))throw Error('Invalid thread vectors.');
-        await writeVectors(documents.map(d=>({...d,chatURL:url})));return {ok:true};
+        await writeVectors(documents.map(d=>({...d,chatURL:url})));
+        chrome.runtime.sendMessage({type:'threadrail:archive-updated',url}).catch(()=>{});return {ok:true};
       }
       if(message.type==='threadrail:library-save') {
         if(!sender.tab || sender.tab.incognito)return {skipped:true};
@@ -46,7 +48,7 @@ export function installArchiveMessages() {
         const snapshot=message.snapshot;
         if(!Array.isArray(snapshot.messages)||snapshot.messages.length>10000||snapshot.messages.some(m=>!['prompt','answer'].includes(m.role)||typeof m.key!=='string'||typeof m.text!=='string'||m.text.length>2000000))throw new Error('Invalid chat snapshot.');
         const saved=await saveChat({...snapshot,title:String(snapshot.title??'Conversation').slice(0,300),provider:String(snapshot.provider??'Chat').slice(0,60)});
-        chrome.runtime.sendMessage({type:'threadrail:archive-updated'}).catch(()=>{});return saved;
+        chrome.runtime.sendMessage({type:'threadrail:archive-updated',url}).catch(()=>{});return saved;
       }
       if(message.type==='threadrail:library-show') {
         if(sender.tab?.incognito)throw new Error('The chat library is unavailable in private browsing.');

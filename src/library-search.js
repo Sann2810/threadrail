@@ -2,7 +2,9 @@ import {semanticQuery} from './search-text.js';
 import {retrievalQuery} from './search-model.js';
 import {rankPassages} from './search-ranker.js';
 
-export const savedChatOrder=chats=>[...chats].sort((a,b)=>a.firstSeen-b.firstSeen);
+// First seen, then address: the same order as reading the store, which lists
+// chats by address, regardless of how the chats were collected.
+export const savedChatOrder=chats=>[...chats].sort((a,b)=>a.firstSeen-b.firstSeen||(a.url<b.url?-1:a.url>b.url?1:0));
 export function libraryResults(results){
   const seen=new Set();
   return results.filter(result=>{if(seen.has(result.chatURL))return false;seen.add(result.chatURL);return true;}).slice(0,12);

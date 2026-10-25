@@ -1,6 +1,6 @@
-import { allChats, forgetChats, readVectors, saveChat, writeVectors } from './archive-store.js';
+import { allChats, chatURLs, chatsUpdatedSince, forgetChats, readChat, readVectors, saveChat, writeVectors } from './archive-store.js';
 import { archiveSources } from './archive-model.js';
-import { SearchIndex } from './search-index.js';
+import { SearchIndex, hasVector } from './search-index.js';
 import { SEARCH_MODEL } from './search-model.js';
 import {libraryResults,libraryTarget,libraryQueryVector,savedChatOrder} from './library-search.js';
 import { RankedSearch } from './search-ranker.js';
@@ -9,7 +9,9 @@ import { renderSearchColumns } from './search-results-view.js';
 const $=selector=>document.querySelector(selector);
 const index=new SearchIndex(SEARCH_MODEL),client=new EmbeddingClient(),queries=new Map();
 const rankedSearch=new RankedSearch(index,client,render);
-let chats=[],indexing=false,searchToken=0,searchTimer,refreshTimer,scanning=false,stopped=false,modelFailed=false;
+// Chats and their search sources are cached; reloads read only changed chats.
+let chats=[],chatMap=new Map(),chatSources=new Map(),loaded=false,lastUpdated=0;
+let indexing=false,searchToken=0,searchTimer,refreshTimer,scanning=false,stopped=false,modelFailed=false;
 async function send(type,args={}){
   const response=await chrome.runtime.sendMessage({type:`threadrail:library-${type}`,...args});
   if(response?.error)throw new Error(response.error);return response;
@@ -33,7 +35,7 @@ function resultRow(result){
 }
 function render(){
   const query=$('#query').value.trim(),vector=queries.get(query);
-  const pending=index.documents.filter(d=>!d.vector).length;
+  const pending=index.documents.filter(d=>!hasVector(d)).length;
   const ranked=query?rankedSearch.get(query,vector):null;
   $('#search-status').textContent=!query?'':modelFailed?'Smart search unavailable. Reopen to retry.':pending?`Preparing search… ${index.documents.length-pending}/${index.documents.length}`:!vector?'Searching…':ranked?.pending?'Ranking matches…':ranked?.error?'Smart ranking unavailable':'';
   if(!query){renderSearchColumns($('#best'),$('#words'),[],[],{query});return;}
@@ -56,19 +58,43 @@ async function embedIndex(){
   if(indexing||modelFailed)return;indexing=true;
   try{
     for(let batch;(batch=index.pending()).length;){
-      const vectors=await client.embed(batch.map(document=>document.embeddingText));
+      // Float32Array holds the model's float32 output exactly in half the memory.
+      const vectors=(await client.embed(batch.map(document=>document.embeddingText))).map(vector=>Float32Array.from(vector));
       index.accept(batch,vectors);
       // Persist only vectors accepted by the current text version.
-      await writeVectors(index.documents.filter(document=>batch.some(b=>b.embeddingText===document.embeddingText)&&document.vector));
+      const texts=new Set(batch.map(document=>document.embeddingText));
+      await writeVectors(index.documents.filter(document=>texts.has(document.embeddingText)&&document.vector));
       render();
     }
   }catch{modelFailed=true;render();}finally{indexing=false;}
 }
-async function refresh(){
-  chats=savedChatOrder(await allChats());
-  index.sync(archiveSources(chats));
-  index.restoreVectors(await readVectors());
-  const saved=chats.filter(chat=>chat.messages?.length),messages=archiveSources(saved).length;
+// Load every chat once, then only the chat named by an update, or the chats
+// changed since the last load.
+async function loadChats(url){
+  if(!loaded){
+    chatMap=new Map((await allChats()).map(chat=>[chat.url,chat]));
+    index.restoreVectors(await readVectors());loaded=true;
+  }else if(url){
+    const chat=await readChat(url);if(chat)chatMap.set(url,chat);else chatMap.delete(url);
+    index.restoreVectors(await readVectors(url));
+  }else{
+    const urls=new Set(await chatURLs());
+    for(const key of chatMap.keys())if(!urls.has(key))chatMap.delete(key);
+    for(const chat of await chatsUpdatedSince(lastUpdated)){chatMap.set(chat.url,chat);index.restoreVectors(await readVectors(chat.url));}
+  }
+  for(const chat of chatMap.values())lastUpdated=Math.max(lastUpdated,chat.updatedAt??0);
+}
+function sourcesOf(chat){
+  let cached=chatSources.get(chat.url);
+  if(cached?.chat!==chat){cached={chat,sources:archiveSources([chat])};chatSources.set(chat.url,cached);}
+  return cached.sources;
+}
+async function refresh(url){
+  await loadChats(url);
+  chats=savedChatOrder([...chatMap.values()]);
+  for(const key of chatSources.keys())if(!chatMap.has(key))chatSources.delete(key);
+  index.sync(chats.flatMap(sourcesOf));
+  const saved=chats.filter(chat=>chat.messages?.length),messages=saved.reduce((sum,chat)=>sum+sourcesOf(chat).length,0);
   $('#coverage').textContent=`${saved.length} ${saved.length===1?'chat':'chats'} · ${messages} ${messages===1?'message':'messages'} · History may be incomplete`;
   $('#empty').hidden=saved.length>0;$('#manage-title').textContent=`Saved on this device · ${saved.length} ${saved.length===1?'chat':'chats'}`;
   $('#chat-list').replaceChildren();
@@ -76,7 +102,7 @@ async function refresh(){
     const row=document.createElement('div');row.className='saved-chat';
     const info=document.createElement('div');info.append(text('strong','',chat.title||'Conversation'),text('span','library-result-meta',`${chat.provider} · ${chat.messages?.length??0} messages${chat.messages?.length?'':' · Not indexed'}`));
     const remove=text('button','text-button','Remove');remove.setAttribute('aria-label',`Remove ${chat.title||'conversation'} from this device`);
-    remove.onclick=async()=>{try{await forgetChats(chat.url);await refresh();}catch(error){setError(error);}};
+    remove.onclick=async()=>{try{await forgetChats(chat.url);await refresh(chat.url);}catch(error){setError(error);}};
     row.append(info,remove);$('#chat-list').append(row);
   }
   render();embedIndex();
@@ -93,7 +119,7 @@ $('#scan').onclick=async()=>{
       if(stopped)break;
       $('#scan-status').textContent=`Adding ${completed+failed+1}/${found.chats.length} · ${chat.title}`;
       try{await send('scan',{url:chat.url});completed++;}catch(error){if(!stopped){failed++;setError(error);}}
-      await refresh();
+      await refresh(chat.url);
     }
     $('#scan-status').textContent=`${stopped?'Stopped · ':''}${completed} chats added${failed?` · ${failed} unavailable`:''}`;
   }catch(error){setError(error);$('#scan-status').textContent='';}
@@ -104,9 +130,15 @@ $('#saving').onchange=()=>chrome.storage.local.set({libraryPaused:!$('#saving').
 $('#clear').onclick=()=>{$('#clear-confirm').hidden=false;};
 $('#cancel-clear').onclick=()=>{$('#clear-confirm').hidden=true;};
 $('#confirm-clear').onclick=async()=>{
-  try{stopped=true;if(scanning)await send('stop');await chrome.storage.local.set({libraryPaused:true});$('#saving').checked=false;await forgetChats();$('#clear-confirm').hidden=true;await refresh();}catch(error){setError(error);}
+  try{stopped=true;if(scanning)await send('stop');await chrome.storage.local.set({libraryPaused:true});$('#saving').checked=false;await forgetChats();$('#clear-confirm').hidden=true;loaded=false;await refresh();}catch(error){setError(error);}
 };
-chrome.runtime.onMessage.addListener(message=>{if(message.type==='threadrail:archive-updated'){clearTimeout(refreshTimer);refreshTimer=setTimeout(()=>refresh().catch(setError),400);}});
+// Updates name their chat; several at once fall back to a changed-since reload.
+let updated=new Set();
+chrome.runtime.onMessage.addListener(message=>{
+  if(message.type!=='threadrail:archive-updated')return;
+  updated.add(message.url??null);clearTimeout(refreshTimer);
+  refreshTimer=setTimeout(()=>{const urls=updated;updated=new Set();refresh(urls.size===1&&!urls.has(null)?[...urls][0]:undefined).catch(setError);},400);
+});
 window.addEventListener('pagehide',()=>{if(scanning)send('stop').catch(()=>{});});
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!scanning)refresh().catch(setError);});
 const {libraryPaused=false}=await chrome.storage.local.get('libraryPaused');$('#saving').checked=!libraryPaused;

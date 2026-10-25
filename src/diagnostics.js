@@ -1,6 +1,6 @@
 import {allChats,readVectors,writeVectors} from './archive-store.js';
 import {archiveSources} from './archive-model.js';
-import {SearchIndex} from './search-index.js';
+import {SearchIndex,hasVector} from './search-index.js';
 import {SEARCH_MODEL} from './search-model.js';
 import {EmbeddingClient} from './embedding-client.js';
 import {libraryTarget,savedChatOrder,searchSavedIndex} from './library-search.js';
@@ -75,7 +75,7 @@ $('#tests').onsubmit=async event=>{
           $('#status').textContent=`Round ${round}/2 · Test ${number+1}/${tests.length} · Searching…`;
           const results=await searchSavedIndex(index,client,test.query,{check,signal:runAbort.signal,onBatch:async batch=>{
             await writeVectors(batch.filter(d=>d.vector));check();
-            $('#status').textContent=`Round ${round}/2 · Preparing search… ${index.documents.filter(d=>d.vector).length}/${index.documents.length}`;
+            $('#status').textContent=`Round ${round}/2 · Preparing search… ${index.documents.filter(hasVector).length}/${index.documents.length}`;
           }});
           const first=results[0];Object.assign(row,checkDiagnosticRank(test,results),{actualChatURL:first?.chatURL,actualTitle:first?.chatTitle,excerpt:first?.excerpt});
           if(row.ok){

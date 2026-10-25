@@ -5,7 +5,7 @@ import {ThreadHistory} from './thread-history.js';
 import { semanticQuery } from './search-text.js';
 import { SEARCH_MODEL, retrievalQuery } from './search-model.js';
 import { RankedSearch } from './search-ranker.js';
-import { SearchIndex } from './search-index.js';
+import { SearchIndex, hasVector } from './search-index.js';
 import { EmbeddingClient } from './embedding-client.js';
 import { passageRange,passageTarget } from './search-range.js';
 import { ConversationAdapter } from './chatgpt-adapter.js';
@@ -436,7 +436,7 @@ class ThreadRail {
   renderSearch() {
     if (this.state !== State.SEARCH) return;
     const windows=this.searchIndex.documents.filter(d=>!d.isFine);
-    const indexed = windows.filter(document => document.vector).length;
+    const indexed = windows.filter(hasVector).length;
     const total = windows.length;
     const vector = this.queryVectors.get(this.searchQuery);
     const ranked = this.searchQuery ? this.rankedSearch.get(this.searchQuery,vector) : null;

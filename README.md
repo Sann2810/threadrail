@@ -2,6 +2,16 @@
 
 Find your place, faster. Private conversation navigation for ChatGPT, Claude, Gemini, and other chat websites you enable.
 
+If you've ever had a long conversation with ChatGPT, Claude, or Gemini, you've probably experienced the frustration of trying to find something you discussed earlier. Maybe it was an answer you wanted to revisit, an idea you had been working through, or a small detail buried somewhere in hundreds of messages. You remember having the conversation, sometimes even what was said, but finding it again means scrolling endlessly and hoping you recognise it along the way.
+
+I built ThreadRail to make that a little easier. It's a free, open-source browser extension for Chrome and Edge that adds a slim rail to the right side of your conversations, with a small mark for every question you've asked. You can hover over any mark to see a preview, click to jump straight to that part of the conversation, or use the buttons to return to the very beginning or the latest message. It stays out of your way until you need it.
+
+There's also a search feature for those moments when you can't quite remember the words you used. You can simply describe what you're looking for, and ThreadRail will try to find the relevant passage and take you there. Even if it's buried so far back that the website hasn't loaded it yet, you can read the saved text immediately while ThreadRail brings that part of the conversation into view.
+
+Over time, you can also build a private library of your conversations, kept entirely on your own computer. This lets you search across different chats in one place and return to the exact passage you need, without having to remember which conversation it belonged to. Nothing is sent to an outside server, and you can pause saving or clear your library whenever you want. There's a companion for saved Claude Code and Codex sessions, too, so you can find things from those conversations in much the same way.
+
+ThreadRail is simply something I wanted for my own conversations, and I thought others might find it useful as well. It's free, the code is open for anyone to explore, and I hope it makes returning to old conversations a little less frustrating.
+
 ## Install in Chrome or Edge
 
 1. Unzip `release/threadrail-1.6.14.zip`, or use this project's `dist/` folder.
@@ -136,3 +146,7 @@ Coverage is deliberately partial: this is a library of captured text, not a comp
 Installed-extension library test evidence and limits are recorded in [LIBRARY_TESTS.md](LIBRARY_TESTS.md).
 
 Versions 1.5.1–1.5.2 align in-thread ranking with the library’s meaning-first scoring, normalize common British/American spelling variants only for embedding queries, and exclude host render-failure placeholders from search and new captures. Short generic answer fragments receive less semantic weight so they do not hide the original input. Literal word groups keep the original spelling and complete ordering.
+
+## License
+
+ThreadRail is released under the [MIT License](LICENSE). Bundled search models and libraries keep their own licenses; see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) and [licenses/](licenses/).

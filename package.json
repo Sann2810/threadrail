@@ -2,6 +2,7 @@
   "name": "threadrail",
   "version": "1.6.14",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "description": "Private conversation navigation across AI chat websites.",
   "scripts": {

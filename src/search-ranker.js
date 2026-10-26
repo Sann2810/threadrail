@@ -20,7 +20,11 @@ export async function exactSearch(index,query,vector,client,documents,pick,count
     const open=pool.filter(d=>!d.vector);
     if(!open.length)break;
     const highest=new Map(search(open,1).map((d,i)=>[d.id,i])),batch=[...open].sort((a,b)=>highest.get(a.id)-highest.get(b.id)).slice(0,8);
-    index.accept(batch,await client.embed(batch.map(d=>d.embeddingText),{priority:true}));
+    const vectors=await client.embed(batch.map(d=>d.embeddingText),{priority:true});
+    index.accept(batch,vectors);
+    // A live page rebuilds the index's pieces as the host re-renders; accept
+    // reaches only the current ones, so give these pieces their vectors too.
+    batch.forEach((d,i)=>{d.vector??=vectors[i];});
   }
   return search(pool,0);
 }

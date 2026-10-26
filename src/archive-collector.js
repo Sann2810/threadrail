@@ -108,20 +108,53 @@ export class ArchiveCollector {
       if(!controller.liveSearchSources?.length)throw new Error('No messages were readable. Check sign-in and open this chat normally.');
       if(target&&(matched=this.matching(target)))return {matched};
       await this.capture(true);
+      // Nothing older arrives and the host shows no loader or older-history button.
+      const historySignature=()=>`${controller.scroller.scrollHeight}|${fingerprint((controller.liveSearchSources??[]).map(s=>s.id+s.text).join('|'))}`;
+      const historyPending=()=>controller.adapter.historyLoading(controller.root,controller.scroller)||!!controller.adapter.olderHistoryControl(controller.root);
       let quiet=0,last='';
-      while(active()){
-        controller.scroller.scrollTo({top:0,behavior:'instant'});
-        controller.adapter.olderHistoryControl(controller.root)?.click();
-        await pause(500);controller.refresh();
-        await this.capture();visited++;
-        if(target&&(matched=this.matching(target)))return {matched};
-        const signature=fingerprint((controller.liveSearchSources??[]).map(s=>s.id+s.text).join('|'));
-        quiet=signature===last&&!controller.adapter.historyLoading(controller.root,controller.scroller)&&!controller.adapter.olderHistoryControl(controller.root)?quiet+1:0;last=signature;
-        if(quiet>=4)break;
+      // Where the passage sits in the saved conversation decides which end to
+      // search from. Either way the whole chat is still covered.
+      const saved=controller.threadHistory?.messages??[];
+      const position=target?saved.findIndex(m=>m.key===target.messageKey||(target.nativeId&&m.nativeId===target.nativeId)):-1;
+      const nearStart=position>=0&&saved.length>1&&position/(saved.length-1)<.5;
+      if(target&&!nearStart){
+        // Search outward from where the chat opened. Virtualized hosts draw only
+        // rows near the viewport, so a passage just above the opening position
+        // is found within a few steps instead of after a walk down the whole
+        // chat from its first message. At the top, ask the host for older
+        // messages until none arrive; then cover what lies below the start.
+        const fromBottom=controller.scroller.scrollHeight-controller.scroller.scrollTop;
+        while(active()){
+          const scroller=controller.scroller,atTop=scroller.scrollTop<=2;
+          if(atTop){scroller.scrollTo({top:0,behavior:'instant'});controller.adapter.requestOlderHistory(controller.root,scroller);}
+          else controller.adapter.retreatHistory(controller.root,scroller);
+          await pause(atTop?400:250);visited++;
+          if(matched=this.matching(target))return {matched};
+          if(!atTop){quiet=0;continue;}
+          const signature=historySignature();
+          quiet=signature===last&&!historyPending()?quiet+1:0;last=signature;
+          if(quiet>=4)break;
+        }
+        if(active())controller.scroller.scrollTo({top:Math.max(0,controller.scroller.scrollHeight-fromBottom),behavior:'instant'});
+      }else{
+        // Indexing, or a passage in the older half: stay at the top and take
+        // each batch of older history as the host delivers it (hosts load the
+        // next batch only while the top is in view), then walk forward.
+        while(active()){
+          controller.scroller.scrollTo({top:0,behavior:'instant'});
+          controller.adapter.requestOlderHistory(controller.root,controller.scroller);
+          await pause(500);visited++;
+          if(target){if(matched=this.matching(target))return {matched};}
+          else{controller.refresh();await this.capture();}
+          const signature=historySignature();
+          quiet=signature===last&&!historyPending()?quiet+1:0;last=signature;
+          if(quiet>=4)break;
+        }
       }
       quiet=0;
       while(active()){
-        controller.refresh();await this.capture();visited++;
+        // Saving every window is for indexing; a jump only needs to find its passage.
+        controller.refresh();if(!target)await this.capture();visited++;
         if(target&&(matched=this.matching(target)))return {matched};
         const scroller=controller.scroller,before=scroller.scrollTop;
         const signature=fingerprint((controller.liveSearchSources??[]).map(s=>s.archiveId+s.text).join('|'));

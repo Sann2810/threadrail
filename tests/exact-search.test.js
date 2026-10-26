@@ -45,6 +45,16 @@ test('compressed vectors with exact rechecks rank exactly like exact vectors',as
   assert.ok(rechecked<total,`${rechecked} exact vectors for ${total} pieces`);
 });
 
+test('exact rechecks finish when a live page rebuilds the index during them',async()=>{
+  const {query,exact,compressed,vectors}=library(7),sources=exact.documents.filter(d=>d.key==='0').map(d=>({id:d.sourceId,exchangeId:d.exchangeId,chatURL:d.chatURL,role:d.role,text:d.text,context:''}));
+  const c=client(vectors),embed=c.embed;
+  // Every embed call coincides with a host re-render: new source objects, new pieces.
+  c.embed=async texts=>{compressed.sync(sources.map(s=>({...s})));return embed(texts);};
+  const result=await Promise.race([rankPassages(compressed,'kettle harbor',query,c,compressed.documents.length),new Promise(resolve=>setTimeout(()=>resolve('timed out'),5000))]);
+  assert.notEqual(result,'timed out');
+  assert.deepEqual(result.map(d=>[d.id,d.score]),(await rankPassages(exact,'kettle harbor',query,client(vectors),exact.documents.length)).map(d=>[d.id,d.score]));
+});
+
 test('a compressed similarity always stays within its stated range',()=>{
   const next=random(99);
   for(let i=0;i<500;i++){

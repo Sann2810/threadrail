@@ -106,6 +106,29 @@ export class ConversationAdapter {
       /^(?:load|show) (?:older|earlier|previous)(?: messages)?$/i.test((button.getAttribute('aria-label')||button.textContent).trim()))??null;
   }
 
+  // One step toward earlier messages. A message on screen is drawn whole, so
+  // when the message cut by the top edge starts more than a screen higher (a
+  // long answer), go to its start in one step; otherwise move most of a screen.
+  // Every part of the transcript still passes through the viewport.
+  retreatHistory(root,scroller) {
+    const viewport=this.viewport(scroller),before=scroller.scrollTop,selector=`${this.profile.user}, ${this.profile.assistant}`;
+    const starts=[...root.querySelectorAll(selector)].filter(node=>visible(node)&&!node.parentElement?.closest(selector))
+      .map(node=>this.anchor(node).getBoundingClientRect().top-viewport.top).filter(top=>top<-1);
+    const nearest=starts.length?Math.max(...starts):-Infinity;
+    scroller.scrollTo({top:Math.max(0,before+Math.min(-Math.max(160,viewport.height*.72),nearest-32)),behavior:'instant'});
+  }
+
+  // Ask the host for earlier messages: its own button when one is shown,
+  // otherwise one upward wheel turn on the transcript. ChatGPT loads older
+  // turns on wheel input at the top, not on the scroll position alone.
+  requestOlderHistory(root,scroller) {
+    const control=this.olderHistoryControl(root);
+    if(control){control.click();return;}
+    const first=root?.querySelector(`${this.profile.user}, ${this.profile.assistant}`);
+    const target=first??(scroller===document.scrollingElement?document:scroller);
+    target?.dispatchEvent(new WheelEvent('wheel',{deltaY:-120,bubbles:true,cancelable:true,composed:true,view:window}));
+  }
+
   hasEarlierHistory(root,scroller,captured=[]) {
     if (!root || !scroller) return false;
     // Search already includes retained text. A virtualized tail is not evidence

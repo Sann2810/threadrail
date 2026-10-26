@@ -79,6 +79,9 @@ class ThreadRail {
       if (event.composedPath().includes(this.ui.searchInput)) event.stopImmediatePropagation();
     }, { signal, capture: true });
     for (const type of ['wheel', 'touchstart']) document.addEventListener(type, event => {
+      // Only a person's own scrolling takes over; the wheel nudges that ask a
+      // host for older history are synthetic.
+      if (!event.isTrusted) return;
       if (!event.composedPath().includes(this.ui.host)) this.archive.cancel();
       if (this.state === State.JUMPING && !event.composedPath().includes(this.ui.host)) {
         this.cancelJump();
@@ -583,7 +586,7 @@ class ThreadRail {
     const began = performance.now();
     let changedAt = began;
     let previousSignature = '';
-    let activatedControl=null,activatedSignature='';
+    let activatedControl=null,activatedSignature='',wheeledAt=-Infinity;
     // Instant positioning is deliberate: a smooth animation through a very long
     // transcript can be interrupted by the host's own scroll anchoring.
     const monitor = () => {
@@ -597,6 +600,9 @@ class ThreadRail {
       const control=this.adapter.olderHistoryControl(this.root);
       if(control&&!control.disabled&&!loading&&(control!==activatedControl||signature!==activatedSignature)){
         activatedControl=control;activatedSignature=signature;control.click();changedAt=now;
+      }else if(!control&&now-wheeledAt>=600){
+        // Hosts without a button (ChatGPT) load older turns on wheel input.
+        wheeledAt=now;this.adapter.requestOlderHistory(this.root,scroller);
       }
       if (now - changedAt >= 2500 || now - began >= 45000) {
         this.ui.setTopLoading(false);

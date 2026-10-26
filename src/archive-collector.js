@@ -129,7 +129,14 @@ export class ArchiveCollector {
       // Nothing older arrives and the host shows no loader or older-history button.
       const historySignature=()=>`${controller.scroller.scrollHeight}|${fingerprint((controller.liveSearchSources??[]).map(s=>s.id+s.text).join('|'))}`;
       const historyPending=()=>controller.adapter.historyLoading(controller.root,controller.scroller)||!!controller.adapter.olderHistoryControl(controller.root);
-      let quiet=0,last='';
+      // Some hosts (Gemini) show no loader and deliver the next batch of older
+      // history only after a couple of seconds, so history counts as ended
+      // only after several quiet checks spanning at least five seconds.
+      let quiet=0,last='',changed=Date.now();
+      const ended=signature=>{
+        if(signature!==last||historyPending()){quiet=0;changed=Date.now();}else quiet++;
+        last=signature;return quiet>=4&&Date.now()-changed>=5000;
+      };
       // Where the passage sits in the saved conversation (0 = first message,
       // 1 = latest) decides where to search first. Either way the whole chat
       // is still covered.
@@ -149,10 +156,9 @@ export class ArchiveCollector {
           else controller.adapter.retreatHistory(controller.root,scroller);
           await pause(atTop?400:250);visited++;
           if(matched=this.matching(target))return {matched,restoration:trace?.summary('matched')};
-          if(!atTop){quiet=0;continue;}
+          if(!atTop){quiet=0;changed=Date.now();continue;}
           const signature=historySignature();
-          quiet=signature===last&&!historyPending()?quiet+1:0;last=signature;
-          if(quiet>=4)break;
+          if(ended(signature))break;
         }
         if(active())controller.scroller.scrollTo({top:Math.max(0,controller.scroller.scrollHeight-fromBottom),behavior:'instant'});
       }else{
@@ -170,12 +176,11 @@ export class ArchiveCollector {
             // passage is loaded: look for it now instead of loading the rest of
             // the history first. If that look fails, loading goes on as before.
             const loaded=!probed&&this.loadedFraction(target);
-            if(loaded){probed=true;if(matched=await this.probeFrom(loaded.fraction,target,active))return {matched,restoration:trace?.summary('matched')};last='';quiet=0;continue;}
+            if(loaded){probed=true;if(matched=await this.probeFrom(loaded.fraction,target,active))return {matched,restoration:trace?.summary('matched')};last='';quiet=0;changed=Date.now();continue;}
           }
           else{controller.refresh();await this.capture();}
           const signature=historySignature();
-          quiet=signature===last&&!historyPending()?quiet+1:0;last=signature;
-          if(quiet>=4)break;
+          if(ended(signature))break;
         }
         // With the whole history loaded, look where the passage should be:
         // the same fraction of the transcript as of the saved conversation.

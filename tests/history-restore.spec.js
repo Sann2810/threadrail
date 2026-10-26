@@ -67,11 +67,15 @@ const streaming=topBatches.replace('</body>',`<script>setTimeout(()=>{
   const growing=document.createElement('p');answer.querySelector('.font-claude-response').append(growing);
   let words=0;setInterval(()=>{growing.textContent+=' still writing '+words++;},100);
 },50);</script></body>`);
+// As on Gemini: no loader at all, and each older batch arrives only after a
+// couple of seconds at the top.
+const slowBatches=topBatches.replace('loading=false;},700);','loading=false;},2200);');
 const cases=[
   {provider:'chatgpt',url:'https://chatgpt.com/c/history-restore',count:30,target:4,hard:wheelHistory},
   {provider:'claude',url:'https://claude.ai/chat/history-restore',count:250,target:242,hard:virtualized},
   {provider:'claude',url:'https://claude.ai/chat/history-start',count:200,target:1,hard:topBatches,name:'its first answer, behind batches of older history'},
   {provider:'claude',url:'https://claude.ai/chat/history-middle',count:300,target:150,hard:virtualBatches,name:'a passage in the middle of a long virtualized chat'},
+  {provider:'claude',url:'https://claude.ai/chat/history-slow',count:120,target:40,hard:slowBatches,name:'a passage behind slow older batches with no loader'},
   {provider:'claude',url:'https://claude.ai/chat/history-streaming',count:120,target:1,hard:streaming,name:'an older passage while the newest answer is still being written'},
 ];
 for(const {provider,url,count,target,hard,name='a saved passage outside the drawn history'} of cases)test(`${provider}: ${name} is restored without a manual scroll`,async()=>{

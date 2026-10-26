@@ -1,11 +1,14 @@
 import {createHash} from 'node:crypto';
 import { build } from 'esbuild';
 import { mkdir, copyFile, rm, cp, readdir, readFile, writeFile } from 'node:fs/promises';
+import { join } from 'node:path';
 import { SEARCH_MODEL } from '../src/search-model.js';
 
 const hash=createHash('sha256');
 for(const path of ['manifest.json','package-lock.json','scripts/build.mjs'])hash.update(await readFile(path));
-for(const name of (await readdir('src')).sort())if(/\.(?:js|css|html)$/.test(name)){hash.update(name);hash.update(await readFile(`src/${name}`));}
+// Every source compiled or copied into dist, so any change gives a new ID.
+const sources=async directory=>(await readdir(directory,{recursive:true,withFileTypes:true})).filter(entry=>entry.isFile()&&/\.(?:js|css|html)$/.test(entry.name)).map(entry=>join(entry.parentPath??entry.path,entry.name));
+for(const path of [...await sources('src'),...await sources('native/public')].sort()){hash.update(path);hash.update(await readFile(path));}
 const buildId=hash.digest('hex');
 const define={__THREADRAIL_BUILD_ID__:JSON.stringify(buildId)};
 

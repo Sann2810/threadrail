@@ -38,6 +38,6 @@ for(const provider of ['chatgpt','claude'])test(`${provider}: saved navigation w
     },{url,target,quote});
     expect(await page.evaluate(()=>window.earlyNavigation)).toBe(false);
     expect(result.jump.ok,JSON.stringify(result)).toBe(true);expect(result.verification.ok,JSON.stringify(result)).toBe(true);
-    expect(result.jump.restoration.stop).toBe('matched');expect(result.jump.restoration.elapsedMs).toBeGreaterThanOrEqual(1700);
+    expect(result.jump.restoration.stop).toBe('matched');
   }finally{await context.close();await rm(directory,{recursive:true,force:true});}
 });

@@ -11,3 +11,6 @@ desktop/claude-code/models/
 
 # Personal live test plans and reports stay local.
 diagnostics/*.json
+
+# Separate projects with their own repositories and build outputs.
+sites/

@@ -46,3 +46,21 @@ test('diagnostic actions reject website senders before opening any tab',async()=
     assert.match(response.error,/Open ThreadRail diagnostics/);assert.equal(created,0);
   }finally{delete globalThis.chrome;}
 });
+
+test('a different content-script build fails before attempting a passage jump',async()=>{
+  let listener,jumps=0;const removed=[];
+  const own='chrome-extension://test/diagnostics.html';
+  globalThis.chrome={runtime:{id:'test',getURL:p=>`chrome-extension://test/${p}`,onMessage:{addListener:fn=>listener=fn}},
+    tabs:{onRemoved:{addListener(){}},get:async()=>({id:1,url:own}),create:async()=>({id:2}),update:async()=>{},remove:async id=>removed.push(id)},
+    storage:{session:{get:async()=>({}),set:async()=>{},remove:async()=>{}}}};
+  try{
+    installDiagnostics({allowedURL:async()=>url,readyMessage:async(_id,message)=>{
+      if(message.type==='threadrail:status')return {buildId:'different-build'};jumps++;return {ok:true};
+    }});
+    const send=message=>new Promise(resolve=>listener(message,{id:'test',url:own},resolve));
+    const begun=await send({type:'threadrail:diagnostic-begin',owner:1});
+    const result=await send({type:'threadrail:diagnostic-jump',token:begun.token,
+      target:{chatURL:url,role:'answer',sourceText:'Original passage.',matchText:'Original passage.'},expectedPassage:'Original passage.'});
+    assert.equal(result.ok,false);assert.match(result.reason,/different ThreadRail builds/);assert.equal(jumps,0);assert.deepEqual(removed,[2]);
+  }finally{delete globalThis.chrome;}
+});

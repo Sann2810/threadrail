@@ -188,6 +188,22 @@ test('reopening a saved result loads an initially absent older turn and lands de
   }finally{await context.close();await rm(directory,{recursive:true,force:true});}
 });
 
+test('Add chats reports a chat with no readable messages instead of counting it as added',async()=>{
+  test.setTimeout(90000);
+  const directory=await mkdtemp(resolve(tmpdir(),'threadrail-library-unreadable-')),extension=resolve('dist');
+  const context=await chromium.launchPersistentContext(directory,{channel:'chromium',headless:true,args:[`--disable-extensions-except=${extension}`,`--load-extension=${extension}`]});
+  try{
+    // A signed-out chat: the page loads, but shows no messages.
+    const home=providerFixture('chatgpt',{count:2}).replace('<body>','<body><nav><a href="/c/signed-out">Signed-out chat</a></nav>');
+    await context.route('https://chatgpt.com/**',route=>route.fulfill({body:route.request().url().endsWith('/signed-out')?providerFixture('chatgpt',{count:0}):home,contentType:'text/html'}));
+    const page=await context.newPage();await page.goto('https://chatgpt.com/c/home');await expect(page.locator('threadrail-navigation')).toHaveAttribute('data-exchange-count','2');
+    const worker=context.serviceWorkers()[0]??await context.waitForEvent('serviceworker'),id=new URL(worker.url()).host;
+    const library=await context.newPage();await library.goto(`chrome-extension://${id}/library.html`);
+    await library.locator('#scan').click();await expect(library.locator('#scan')).toBeEnabled({timeout:80000});
+    await expect(library.locator('#scan-status')).toHaveText('1 chats added · 1 unavailable');
+  }finally{await context.close();await rm(directory,{recursive:true,force:true});}
+});
+
 test('Remove and Clear cannot be undone by stale snapshots or delayed vector writes',async({page})=>{
   await page.goto('/');
   const result=await page.evaluate(async()=>{

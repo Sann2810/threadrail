@@ -1,3 +1,4 @@
+import {BUILD_ID} from './build-info.js';
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 export function installDiagnostics({readyMessage,allowedURL}){
   const runs=new Map(),pageURL=chrome.runtime.getURL('diagnostics.html');
@@ -27,7 +28,7 @@ export function installDiagnostics({readyMessage,allowedURL}){
       if(message.type==='threadrail:diagnostic-begin'){
         const tab=await chrome.tabs.get(message.owner);
         if(tab.url?.split(/[?#]/)[0]!==pageURL)throw Error('Open diagnostics in a tab.');
-        const token=crypto.randomUUID();runs.set(token,{owner:tab.id,tabs:new Set(),cancelled:false});return {token};
+        const token=crypto.randomUUID();runs.set(token,{owner:tab.id,tabs:new Set(),cancelled:false});return {token,buildId:BUILD_ID};
       }
       const run=runs.get(message.token);
       if(!run)throw Error('This diagnostic run has ended.');
@@ -42,13 +43,15 @@ export function installDiagnostics({readyMessage,allowedURL}){
       const tab=await chrome.tabs.create({url:'about:blank',active:true});run.tabs.add(tab.id);await persist();
       try{
         await chrome.tabs.update(tab.id,{url});
+        const status=await readyMessage(tab.id,{type:'threadrail:status'},15000,()=>run.cancelled);
+        if(status?.buildId!==BUILD_ID)return {ok:false,reason:'Chat and test runner use different ThreadRail builds. Reload the extension.',contentBuildId:status?.buildId??'unknown',backgroundBuildId:BUILD_ID};
         const jumped=await readyMessage(tab.id,{type:'threadrail:archive-jump',target},15000,()=>run.cancelled);
         if(!jumped?.ok)return {ok:false,reason:jumped?.reason??jumped?.error??'The saved passage could not be restored.',restoration:jumped};
         const verify=()=>readyMessage(tab.id,{type:'threadrail:archive-verify',target,expectedPassage:expected},15000,()=>run.cancelled);
         const first=await verify();await pause(400);const second=await verify();
         const stable=first.ok&&second.ok&&Math.abs(first.top-second.top)<3;
         return {ok:!!stable,reason:!second.ok?second.reason??second.error:!first.ok?first.reason??first.error:!stable?'Passage moved after landing':undefined,
-          first,second};
+          first,second,contentBuildId:status.buildId,restoration:jumped.restoration};
       }finally{
         run.tabs.delete(tab.id);try{await chrome.tabs.remove(tab.id);}catch{}await persist();
         if(!run.cancelled)try{await chrome.tabs.update(run.owner,{active:true});}catch{}

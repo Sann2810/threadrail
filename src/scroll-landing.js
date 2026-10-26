@@ -11,7 +11,9 @@ export async function settleScroll({read,signal,minimum=250,quiet=150,timeout=10
       const {scroller}=sample,top=Math.max(0,Math.min(sample.top,Math.max(0,scroller.scrollHeight-scroller.clientHeight)));
       if(lastScroll!==scroller.scrollTop){lastMovement=now();lastScroll=scroller.scrollTop;}
       const reached=Math.abs(scroller.scrollTop-top)<3;
-      const signature=JSON.stringify([top,scroller.scrollTop,scroller.scrollHeight,scroller.clientHeight,sample.geometry]);
+      // Not scrollHeight: an answer still being written grows the transcript
+      // below without moving the passage; top (clamped) and geometry catch moves.
+      const signature=JSON.stringify([top,scroller.scrollTop,scroller.clientHeight,sample.geometry]);
       const same=previous?.scroller===scroller&&previous?.element===sample.element&&previous?.signature===signature;
       if(reached&&sample.ready!==false&&same){stableSince??=now();}
       else stableSince=null;

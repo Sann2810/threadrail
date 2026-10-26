@@ -59,11 +59,20 @@ const virtualBatches=`<script>requestAnimationFrame(()=>requestAnimationFrame(()
   scroll.addEventListener('scroll',()=>{render();if(scroll.scrollTop>5||loading||!hidden.length)return;loading=true;
     setTimeout(()=>{const before=scroll.scrollHeight;list.prepend(...hidden.splice(-80));scroll.scrollTop+=scroll.scrollHeight-before;render();loading=false;},700);});
 }));</script></body>`;
+// The newest answer is still being written: it keeps growing below the
+// passage while older history loads and the jump lands.
+const streaming=topBatches.replace('</body>',`<script>setTimeout(()=>{
+  const answer=[...document.querySelectorAll('[data-testid="assistant-message"]')].at(-1);
+  answer.dataset.isStreaming='true';answer.closest('[data-perf-row]').dataset.perfRowStreaming='true';
+  const growing=document.createElement('p');answer.querySelector('.font-claude-response').append(growing);
+  let words=0;setInterval(()=>{growing.textContent+=' still writing '+words++;},100);
+},50);</script></body>`);
 const cases=[
   {provider:'chatgpt',url:'https://chatgpt.com/c/history-restore',count:30,target:4,hard:wheelHistory},
   {provider:'claude',url:'https://claude.ai/chat/history-restore',count:250,target:242,hard:virtualized},
   {provider:'claude',url:'https://claude.ai/chat/history-start',count:200,target:1,hard:topBatches,name:'its first answer, behind batches of older history'},
   {provider:'claude',url:'https://claude.ai/chat/history-middle',count:300,target:150,hard:virtualBatches,name:'a passage in the middle of a long virtualized chat'},
+  {provider:'claude',url:'https://claude.ai/chat/history-streaming',count:120,target:1,hard:streaming,name:'an older passage while the newest answer is still being written'},
 ];
 for(const {provider,url,count,target,hard,name='a saved passage outside the drawn history'} of cases)test(`${provider}: ${name} is restored without a manual scroll`,async()=>{
   test.setTimeout(120000);

@@ -1,3 +1,4 @@
+import {BUILD_ID} from './build-info.js';
 import {allChats,readVectors,writeVectors} from './archive-store.js';
 import {archiveSources} from './archive-model.js';
 import {SearchIndex,hasVector} from './search-index.js';
@@ -58,11 +59,12 @@ $('#tests').onsubmit=async event=>{
   try{tests=diagnosticPlan([...$('#cases').children].map(row=>Object.fromEntries([...row.querySelectorAll('[name]')].map(field=>[field.name,field.value]))));}
   catch(error){$('#plan').open=true;$('#error').textContent=error.message;return;}
   stopped=false;forgotten=false;runAbort=new AbortController();setRunning(true);
-  report={version:chrome.runtime.getManifest().version,embeddingVersion:SEARCH_MODEL.embeddingVersion,
+  report={buildId:BUILD_ID,version:chrome.runtime.getManifest().version,embeddingVersion:SEARCH_MODEL.embeddingVersion,
     startedAt:new Date().toISOString(),state:'running',rounds:2,total:tests.length*2,results:[]};render();
   try{
     await chrome.storage.local.set({diagnosticPlan:{cases:tests}});await saveReport();
-    const owner=await chrome.tabs.getCurrent();if(!owner?.id)throw Error('Open diagnostics in a tab.');({token}=await send('begin',{owner:owner.id}));check();
+    const owner=await chrome.tabs.getCurrent();if(!owner?.id)throw Error('Open diagnostics in a tab.');const begun=await send('begin',{owner:owner.id});token=begun.token;report.backgroundBuildId=begun.buildId;
+    if(begun.buildId!==BUILD_ID)throw Error('Test search and background use different builds. Refresh Test search.');check();
     for(const round of [1,2]){
       check();$('#status').textContent=`Round ${round}/2 · Loading saved chats…`;
       const saved=savedChatOrder(await allChats()),sources=archiveSources(saved),index=new SearchIndex(SEARCH_MODEL),client=new EmbeddingClient();

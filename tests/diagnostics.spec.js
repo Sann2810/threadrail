@@ -49,7 +49,8 @@ test('one user run ranks all providers, restores exact passages twice, exports s
     const report=await f.page.evaluate(async()=> (await chrome.storage.local.get('diagnosticReport')).diagnosticReport);
     await writeFile('test-results/diagnostics-report.json',JSON.stringify(report,null,2));
     await expect(f.page.locator('#summary')).toHaveText('6/6 passed');
-    expect(report.results).toHaveLength(6);
+    expect(report.results).toHaveLength(6);expect(report.buildId).toMatch(/^[a-f0-9]{64}$/);expect(report.backgroundBuildId).toBe(report.buildId);
+    for(const row of report.results){expect(row.jump.contentBuildId).toBe(report.buildId);expect(row.jump.restoration.stop).toBe('matched');}
     for(const row of report.results){expect(row.rank).toBe(1);expect(row.ok).toBe(true);expect(row.jump.first.ok).toBe(true);expect(row.jump.second.ok).toBe(true);expect(row.jump.second.top).toBeGreaterThanOrEqual(row.jump.second.headerBottom);}
     expect(new Set(f.context.pages())).toEqual(existing);
     for(const original of f.originals)await expect(original.getByRole('textbox',{name:'Message',exact:true})).toHaveValue('Keep this unsent draft.');

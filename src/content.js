@@ -1,3 +1,4 @@
+import {BUILD_ID} from './build-info.js';
 import {settleScroll} from './scroll-landing.js';
 import { ArchiveCollector } from './archive-collector.js';
 import {chatURL} from './archive-model.js';
@@ -781,7 +782,7 @@ if (!globalThis.__threadrail) {
     }
     if (message.type === 'threadrail:status') {
       const controller = instance.controller;
-      respond({ provider: controller?.profile.name, state: controller?.state,
+      respond({ buildId:BUILD_ID,provider: controller?.profile.name, state: controller?.state,
         exchanges: controller?.exchanges.length ?? 0,
         completed: controller?.exchanges.filter(exchange => exchange.completed).length ?? 0,
         enabled: !!controller, version: globalThis.chrome.runtime.getManifest().version });

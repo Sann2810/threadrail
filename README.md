@@ -1,10 +1,10 @@
-# ThreadRail 1.6.13
+# ThreadRail 1.6.14
 
 Find your place, faster. Private conversation navigation for ChatGPT, Claude, Gemini, and other chat websites you enable.
 
 ## Install in Chrome or Edge
 
-1. Unzip `release/threadrail-1.6.13.zip`, or use this project's `dist/` folder.
+1. Unzip `release/threadrail-1.6.14.zip`, or use this project's `dist/` folder.
 2. Open `chrome://extensions` (or `edge://extensions`) and enable **Developer mode**.
 3. Choose **Load unpacked** and select the folder containing `manifest.json`.
 4. Refresh your open ChatGPT, Claude, and Gemini tabs.

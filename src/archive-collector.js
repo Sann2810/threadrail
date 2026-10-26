@@ -1,3 +1,5 @@
+import {waitForHost} from './host-readiness.js';
+import {RestorationTrace} from './restoration-trace.js';
 import { chatURL, fingerprint } from './archive-model.js';
 import {locateText} from './message-text.js';
 import { visible } from './chatgpt-adapter.js';
@@ -72,6 +74,7 @@ export class ArchiveCollector {
   matching(target,requireMatch=true,refresh=true){
     const controller=this.controller;if(refresh){controller.refresh();controller.syncSearch();}
     const sources=(controller.liveSearchSources??[]).filter(source=>!source.isPassage&&source.role===target.role&&source.element?.isConnected);
+    this.scanTrace?.observe(sources,controller);
     const keys=new Map([...controller.threadHistory.live].map(([key,source])=>[source.element,key]));
     const sameIdentity=source=>target.nativeId?(source.archiveId??source.id)===target.nativeId:!target.messageKey||keys.get(source.element)===target.messageKey;
     const candidates=sources.filter(sameIdentity);
@@ -97,17 +100,32 @@ export class ArchiveCollector {
     if(this.scanning)throw new Error('This chat is already being read.');
     this.scanning=true;this.finding=!!target;this.manualIndex=!target;this.cancelled=false;this.restoreOnCancel=false;
     const controller=this.controller,began=Date.now();let matched=null,visited=0;
+    const trace=target?new RestorationTrace(target):null;this.scanTrace=trace;
     const scanURL=chatURL(location.href);
     const active=()=>!controller.destroyed&&!this.cancelled&&chatURL(location.href)===scanURL&&Date.now()-began<45000;
     try{
-      while(active()&&Date.now()-began<12000){
+      const initialized=await waitForHost({active,read:()=>{
         controller.refresh();controller.syncSearch();
-        if(controller.liveSearchSources?.length&&controller.scroller)break;
-        await pause(350);
-      }
-      if(!controller.liveSearchSources?.length)throw new Error('No messages were readable. Check sign-in and open this chat normally.');
-      if(target&&(matched=this.matching(target)))return {matched};
+        const sources=(controller.liveSearchSources??[]).filter(source=>source.element?.isConnected),scroller=controller.scroller;
+        if(trace)trace.observe(sources.filter(source=>source.role===target.role),controller);
+        const rect=scroller&&controller.adapter.viewport(scroller);
+        // An answer still being written keeps growing the transcript (and may
+        // scroll it); that is not the host starting up, so leave it out.
+        const streaming=new Set(sources.filter(source=>source.role==='answer'&&controller.adapter.contains(controller.adapter.scope(source.element),controller.profile.streaming)));
+        return {ready:!!sources.length&&!!scroller&&rect.height>0&&document.fonts?.status!=='loading'&&
+          !controller.adapter.historyLoading(controller.root,scroller),
+          signature:JSON.stringify([streaming.size?null:scroller?.scrollTop,streaming.size?null:scroller?.scrollHeight,rect?.height,rect?.top,
+            sources.map(source=>[source.archiveId??source.id,streaming.has(source)?null:source.sourceText.length])])};
+      },...(performance.now()>10000?{minimum:0,quiet:300}:{})});
+      // No readable message is an error (signed out, or not a chat), so a
+      // library scan reports it instead of counting the chat as added.
+      if(!initialized.ok&&!this.cancelled&&!controller.liveSearchSources?.length)throw new Error('No messages were readable. Check sign-in and open this chat normally.');
+      // A jump needs a settled host; indexing reads whatever is readable.
+      if(!initialized.ok&&(target||this.cancelled))return {ok:false,partial:true,cancelled:this.cancelled,reason:initialized.reason,
+        restoration:trace?.summary('initialization-not-settled')};
+      if(target&&(matched=this.matching(target)))return {matched,restoration:trace?.summary('matched')};
       this.capture(true).catch(()=>{});
+      if(trace)trace.phase='earlier';
       // Nothing older arrives and the host shows no loader or older-history button.
       const historySignature=()=>`${controller.scroller.scrollHeight}|${fingerprint((controller.liveSearchSources??[]).map(s=>s.id+s.text).join('|'))}`;
       const historyPending=()=>controller.adapter.historyLoading(controller.root,controller.scroller)||!!controller.adapter.olderHistoryControl(controller.root);
@@ -130,7 +148,7 @@ export class ArchiveCollector {
           if(atTop){scroller.scrollTo({top:0,behavior:'instant'});controller.adapter.requestOlderHistory(controller.root,scroller);}
           else controller.adapter.retreatHistory(controller.root,scroller);
           await pause(atTop?400:250);visited++;
-          if(matched=this.matching(target))return {matched};
+          if(matched=this.matching(target))return {matched,restoration:trace?.summary('matched')};
           if(!atTop){quiet=0;continue;}
           const signature=historySignature();
           quiet=signature===last&&!historyPending()?quiet+1:0;last=signature;
@@ -147,12 +165,12 @@ export class ArchiveCollector {
           controller.adapter.requestOlderHistory(controller.root,controller.scroller);
           await this.batchArrival(()=>controller.scroller.scrollHeight,historyPending);visited++;
           if(target){
-            if(matched=this.matching(target))return {matched};
+            if(matched=this.matching(target))return {matched,restoration:trace?.summary('matched')};
             // Once the oldest drawn message is at or before the passage, the
             // passage is loaded: look for it now instead of loading the rest of
             // the history first. If that look fails, loading goes on as before.
             const loaded=!probed&&this.loadedFraction(target);
-            if(loaded){probed=true;if(matched=await this.probeFrom(loaded.fraction,target,active))return {matched};last='';quiet=0;continue;}
+            if(loaded){probed=true;if(matched=await this.probeFrom(loaded.fraction,target,active))return {matched,restoration:trace?.summary('matched')};last='';quiet=0;continue;}
           }
           else{controller.refresh();await this.capture();}
           const signature=historySignature();
@@ -161,13 +179,14 @@ export class ArchiveCollector {
         }
         // With the whole history loaded, look where the passage should be:
         // the same fraction of the transcript as of the saved conversation.
-        if(target&&active()&&(matched=await this.probeFrom(fraction,target,active)))return {matched};
+        if(target&&active()&&(matched=await this.probeFrom(fraction,target,active)))return {matched,restoration:trace?.summary('matched')};
       }
+      if(trace)trace.phase='forward';
       quiet=0;
       while(active()){
         // Saving every window is for indexing; a jump only needs to find its passage.
         controller.refresh();if(!target)await this.capture();visited++;
-        if(target&&(matched=this.matching(target)))return {matched};
+        if(target&&(matched=this.matching(target)))return {matched,restoration:trace?.summary('matched')};
         const scroller=controller.scroller,before=scroller.scrollTop;
         const signature=fingerprint((controller.liveSearchSources??[]).map(s=>s.archiveId+s.text).join('|'));
         controller.adapter.advanceHistory(controller.root,scroller);
@@ -179,8 +198,9 @@ export class ArchiveCollector {
         if(quiet>=4)break;
       }
       if(!this.cancelled&&chatURL(location.href)===scanURL)await this.capture(true);
-      return {ok:!this.cancelled,partial:true,visited,cancelled:this.cancelled};
-    }finally{this.scanning=false;this.finding=false;this.manualIndex=false;}
+      return {ok:!this.cancelled,partial:true,visited,cancelled:this.cancelled,
+        restoration:trace?.summary(this.cancelled?'cancelled':chatURL(location.href)!==scanURL?'address-changed':Date.now()-began>=45000?'deadline':'end-of-readable-history')};
+    }finally{this.scanTrace=null;this.scanning=false;this.finding=false;this.manualIndex=false;}
   }
   // Wait up to half a second for the host's next batch of older history:
   // return as soon as it has arrived and stopped changing.
@@ -257,7 +277,7 @@ export class ArchiveCollector {
       this.landingProof={saved:target.sourceText,canonical:result.matched.sourceText,
         url:target.chatURL,role:target.role,nativeId:result.matched.nativeId};
       const landing=await controller.jumpSearch({...result.matched,restored:true});
-      return landing??{ok:false,reason:'Passage navigation was interrupted'};
+      return {...(landing??{ok:false,reason:'Passage navigation was interrupted'}),restoration:result.restoration};
     }
     if((!result.cancelled||this.restoreOnCancel)&&chatURL(location.href)===target.chatURL&&controller.scroller){
       const live=(controller.liveSearchSources??[]).find(s=>s.archiveId===anchor?.archiveId);
@@ -266,7 +286,7 @@ export class ArchiveCollector {
     }
     controller.ui.announce(result.cancelled?'Search stopped':'Couldn’t open this passage',{persistent:!result.cancelled,
       action:result.cancelled?undefined:'Retry',onAction:()=>this.jump(target).catch(()=>controller.ui.announce('Couldn’t open this passage'))});
-    return {ok:false};
+    return {ok:false,reason:result.reason??(result.cancelled?'Search stopped':'The saved passage could not be restored.'),restoration:result.restoration};
     }finally{
       if(controller.state===State.JUMPING&&!controller.jumpFrame){controller.setState(State.NAVIGATING);controller.measure();controller.armIdle();}
     }

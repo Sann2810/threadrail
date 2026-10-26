@@ -1,19 +1,27 @@
+import {createHash} from 'node:crypto';
 import { build } from 'esbuild';
-import { mkdir, copyFile, rm, cp, readdir } from 'node:fs/promises';
+import { mkdir, copyFile, rm, cp, readdir, readFile, writeFile } from 'node:fs/promises';
 import { SEARCH_MODEL } from '../src/search-model.js';
+
+const hash=createHash('sha256');
+for(const path of ['manifest.json','package-lock.json','scripts/build.mjs'])hash.update(await readFile(path));
+for(const name of (await readdir('src')).sort())if(/\.(?:js|css|html)$/.test(name)){hash.update(name);hash.update(await readFile(`src/${name}`));}
+const buildId=hash.digest('hex');
+const define={__THREADRAIL_BUILD_ID__:JSON.stringify(buildId)};
 
 await rm('dist', { recursive: true, force: true });
 await mkdir('dist', { recursive: true });
-await build({
+await writeFile('dist/build-info.json',JSON.stringify({version:JSON.parse(await readFile('manifest.json','utf8')).version,buildId},null,2)+'\n');
+await build({define,
   entryPoints: ['src/content.js'], bundle: true, outfile: 'dist/threadrail.js',
   format: 'iife', target: ['chrome111', 'firefox128'], loader: { '.css': 'text' },
   legalComments: 'none',
 });
-await build({
+await build({define,
   entryPoints: ['src/background.js', 'src/popup.js', 'src/options.js', 'src/embedding-worker.js', 'src/library.js', 'src/diagnostics.js'], bundle: true, outdir: 'dist',
   format: 'esm', target: ['chrome111'], legalComments: 'none',
 });
-await build({entryPoints:['native/public/app.js'],bundle:true,outfile:'dist/native-app.js',format:'esm',target:['chrome111'],legalComments:'none'});
+await build({define,entryPoints:['native/public/app.js'],bundle:true,outfile:'dist/native-app.js',format:'esm',target:['chrome111'],legalComments:'none'});
 for (const file of ['popup.html', 'options.html', 'library.html', 'diagnostics.html', 'extension.css']) await copyFile(`src/${file}`, `dist/${file}`);
 await copyFile('manifest.json', 'dist/manifest.json');
 await copyFile('README.md', 'dist/README.md');

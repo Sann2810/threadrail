@@ -41,7 +41,7 @@ Verification totals: **17 unit checks and 55 browser checks passed (72 total)**.
 
 The suite also retains existing in-thread search, navigation, provider, 200-exchange, 546 exact-result-click and nine semantic long-chat cases. Live 1.4.2 navigation/search evidence is recorded separately in LONG_CHAT_TESTS.md.
 
-Coverage remains partial. Bulk discovery follows links exposed by open site sidebars; collapsed folders, inaccessible chats and unexposed history can be missed. Each conversation scan is bounded to 45 seconds. Snapshots may retain historical edits or messages removed from the website. Fallback text identities cannot provide a complete account audit. Native desktop and terminal histories are outside this browser extension.
+Coverage remains partial. Bulk discovery follows links exposed by open site sidebars; collapsed folders, inaccessible chats and unexposed history can be missed. Each conversation scan is bounded to 60 seconds. Snapshots may retain historical edits or messages removed from the website. Fallback text identities cannot provide a complete account audit. Native desktop and terminal histories are outside this browser extension.
 
 ## Actual-chat query pass and correction — 1.5.1
 

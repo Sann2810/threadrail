@@ -6,6 +6,9 @@ import { visible } from './chatgpt-adapter.js';
 import {passageTarget,passageRange} from './search-range.js';
 import {State} from './model.js';
 const pause=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+// How long one chat read or passage search may run. Long chats on hosts that
+// deliver older history slowly (Gemini: ~2 s per 10 exchanges) need most of it.
+const SCAN_DEADLINE=60000;
 export class ArchiveCollector {
   constructor(controller){this.controller=controller;this.saved=new Map();this.queue=Promise.resolve();}
   schedule(){
@@ -102,7 +105,7 @@ export class ArchiveCollector {
     const controller=this.controller,began=Date.now();let matched=null,visited=0;
     const trace=target?new RestorationTrace(target):null;this.scanTrace=trace;
     const scanURL=chatURL(location.href);
-    const active=()=>!controller.destroyed&&!this.cancelled&&chatURL(location.href)===scanURL&&Date.now()-began<45000;
+    const active=()=>!controller.destroyed&&!this.cancelled&&chatURL(location.href)===scanURL&&Date.now()-began<SCAN_DEADLINE;
     try{
       const initialized=await waitForHost({active,read:()=>{
         controller.refresh();controller.syncSearch();
@@ -204,7 +207,7 @@ export class ArchiveCollector {
       }
       if(!this.cancelled&&chatURL(location.href)===scanURL)await this.capture(true);
       return {ok:!this.cancelled,partial:true,visited,cancelled:this.cancelled,
-        restoration:trace?.summary(this.cancelled?'cancelled':chatURL(location.href)!==scanURL?'address-changed':Date.now()-began>=45000?'deadline':'end-of-readable-history')};
+        restoration:trace?.summary(this.cancelled?'cancelled':chatURL(location.href)!==scanURL?'address-changed':Date.now()-began>=SCAN_DEADLINE?'deadline':'end-of-readable-history')};
     }finally{this.scanTrace=null;this.scanning=false;this.finding=false;this.manualIndex=false;}
   }
   // Wait up to half a second for the host's next batch of older history:

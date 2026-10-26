@@ -6,6 +6,32 @@ import { fingerprint } from './archive-model.js';
 const STOP = new Set('a an the is are was were be been being i me my you your we our it its this that these those where when what which who why how do did does can could would should find show tell please remember thread chat conversation says said write wrote of to in on at for from with and or as by then there about off up down out into onto'.split(' '));
 export const terms = text => (text.toLocaleLowerCase().normalize('NFKC').match(/[\p{L}\p{N}_][\p{L}\p{N}\p{M}_]*/gu) ?? []).filter(term => !STOP.has(term));
 const counts = words => words.reduce((map, word) => map.set(word, (map.get(word) ?? 0) + 1), new Map());
+// Word counts of one piece, packed: sorted ids into a shared vocabulary and
+// their counts. Answers get/has exactly like a Map from word to count, in a
+// fraction of the memory (a piece holds at most 140 words).
+const vocabulary = new Map();
+class TermCounts {
+  constructor(map) {
+    const entries = [...map].map(([word, count]) => {
+      if (!vocabulary.has(word)) vocabulary.set(word, vocabulary.size);
+      return [vocabulary.get(word), count];
+    }).sort((a, b) => a[0] - b[0]);
+    this.ids = Uint32Array.from(entries, entry => entry[0]);
+    this.counts = Uint16Array.from(entries, entry => entry[1]);
+  }
+  get(word) {
+    const id = vocabulary.get(word);
+    if (id === undefined) return undefined;
+    let low = 0, high = this.ids.length - 1;
+    while (low <= high) {
+      const mid = (low + high) >> 1;
+      if (this.ids[mid] === id) return this.counts[mid];
+      if (this.ids[mid] < id) low = mid + 1; else high = mid - 1;
+    }
+    return undefined;
+  }
+  has(word) { return this.get(word) !== undefined; }
+}
 export function chunkText(text, size = 140, overlap = 28) {
   const words = [...text.matchAll(/\S+/g)];
   const chunks = [];
@@ -62,7 +88,7 @@ function messagePieces(source) {
   return candidates.filter(p=>{const key=`${p.offset}:${p.text.length}`;if(seen.has(key))return false;seen.add(key);return true;}).map(chunk=>{
     const embeddingText=source.embeddingContext?`${source.embeddingContext.slice(0,180)}\n${chunk.text}`:chunk.text;
     const termsMap=counts(terms(chunk.text));
-    return {...chunk,embeddingText,textKey:vectorTextKey(embeddingText),terms:termsMap,length:[...termsMap.values()].reduce((a,b)=>a+b,0)};
+    return {...chunk,embeddingText,textKey:vectorTextKey(embeddingText),terms:new TermCounts(termsMap),length:[...termsMap.values()].reduce((a,b)=>a+b,0)};
   });
 }
 

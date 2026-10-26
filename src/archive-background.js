@@ -1,6 +1,33 @@
-import { chatURL } from './archive-model.js';
+import { chatURL,archiveSources } from './archive-model.js';
 import {saveChat,readChat,readVectors,writeVectors} from './archive-store.js';
 import {SEARCH_MODEL} from './search-model.js';
+import {SearchIndex} from './search-index.js';
+import {embeddings} from './embedding-engine.js';
+
+// Build a saved chat's vectors in the background, a few seconds after its last
+// save, so its first search finds them ready. Interactive searches embed at a
+// higher priority and go first. Progress is stored as it goes, so a build cut
+// short (the service worker can stop) resumes on the chat's next save.
+const vectorQueue=new Map();let building=null;
+function queueVectors(url){
+  clearTimeout(vectorQueue.get(url));
+  vectorQueue.set(url,setTimeout(()=>{vectorQueue.delete(url);building=(building??Promise.resolve()).then(()=>buildVectors(url)).catch(()=>{});},5000));
+}
+async function buildVectors(url){
+  const chat=await readChat(url);if(!chat?.messages?.length)return;
+  const index=new SearchIndex(SEARCH_MODEL);index.sync(archiveSources([chat]));index.restoreVectors(await readVectors(url));
+  let built=0;
+  for(let batch;(batch=index.pending(8)).length;){
+    const {libraryPaused=false}=await chrome.storage.local.get('libraryPaused');if(libraryPaused)break;
+    const vectors=await embeddings(batch.map(d=>d.embeddingText),chrome.runtime.getURL(''),0);
+    index.accept(batch,vectors);built+=batch.length;
+    const texts=new Set(batch.map(d=>d.embeddingText));
+    await writeVectors(index.documents.filter(d=>texts.has(d.embeddingText)&&d.vector));
+  }
+  if(!built)return;
+  chrome.runtime.sendMessage({type:'threadrail:archive-updated',url}).catch(()=>{});
+  for(const tab of await chrome.tabs.query({}))chrome.tabs.sendMessage(tab.id,{type:'threadrail:vectors-ready',url}).catch(()=>{});
+}
 import {installDiagnostics} from './diagnostics-background.js';
 const pause = ms => new Promise(resolve=>setTimeout(resolve,ms));
 let scanTab, discoveryTab, scanCancelled=false, discoveryCancelled=false;
@@ -48,7 +75,8 @@ export function installArchiveMessages() {
         const snapshot=message.snapshot;
         if(!Array.isArray(snapshot.messages)||snapshot.messages.length>10000||snapshot.messages.some(m=>!['prompt','answer'].includes(m.role)||typeof m.key!=='string'||typeof m.text!=='string'||m.text.length>2000000))throw new Error('Invalid chat snapshot.');
         const saved=await saveChat({...snapshot,title:String(snapshot.title??'Conversation').slice(0,300),provider:String(snapshot.provider??'Chat').slice(0,60)});
-        chrome.runtime.sendMessage({type:'threadrail:archive-updated',url}).catch(()=>{});return saved;
+        chrome.runtime.sendMessage({type:'threadrail:archive-updated',url}).catch(()=>{});
+        if(!saved?.skipped)queueVectors(url);return saved;
       }
       if(message.type==='threadrail:library-show') {
         if(sender.tab?.incognito)throw new Error('The chat library is unavailable in private browsing.');

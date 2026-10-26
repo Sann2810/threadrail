@@ -521,10 +521,12 @@ class ThreadRail {
       // message's label and edge too instead of cutting them off at the top.
       const start=this.adapter.anchor(source.element).getBoundingClientRect().top;
       const top=rect.top-start>=0&&rect.top-start<=64?start:rect.top;
-      return {top:top-viewport.top+this.scroller.scrollTop-this.inset,element:source.element,
+      // Restored history can put the passage thousands of pixels away; a
+      // smooth scroll across it only delays the landing.
+      return {top:top-viewport.top+this.scroller.scrollTop-this.inset,element:source.element,...(restoring?{smooth:false}:{}),
         geometry:[rect.top,rect.bottom,rect.left,rect.right,viewport.top,viewport.bottom,this.inset],
         ready:rect.width>0&&rect.height>0&&document.fonts?.status!=='loading'&&!this.adapter.historyLoading(this.root,this.scroller)};
-    },undefined,restoring?{minimum:1200,quiet:650}:{minimum:350,quiet:200});
+    },undefined,restoring?{minimum:650,quiet:650}:{minimum:350,quiet:200});
     if(landing.ok){this.ui.highlightElement(landedRange);this.ui.announce('Jumped to the matching passage');}
     else if(!this.destroyed&&landing.reason!=='Jump cancelled')this.ui.announce(landing.reason);
     return landing;
@@ -744,6 +746,11 @@ if (!globalThis.__threadrail) {
       return true;
     }
     if (message.type === 'threadrail:archive-cancel') {instance.controller?.archive.cancel();respond({ok:true});return;}
+    // The background finished this chat's vectors: load them for thread search.
+    if (message.type === 'threadrail:vectors-ready') {
+      if (instance.controller && message.url === chatURL(location.href)) instance.controller.restoreThreadCache();
+      respond({ok:true});return;
+    }
     if(message.type==='threadrail:archive-reset'){
       const controller=instance.controller,url=chatURL(location.href);
       if(controller&&(!message.url||message.url===url)){

@@ -1,7 +1,9 @@
 export class EmbeddingClient {
   constructor() { this.sequence = 0; this.pending = new Map(); }
-  async embed(texts,{priority=false}={}) {
-    return this.request('embed',{texts,priority});
+  // recheck: exact vectors for close calls, which the background may serve
+  // from (and add to) its cache of earlier rechecks.
+  async embed(texts,{priority=false,recheck=false}={}) {
+    return this.request('embed',{texts,priority,recheck});
   }
   async rerank(query,texts) {
     return this.request('rerank',{query,texts});

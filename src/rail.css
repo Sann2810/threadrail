@@ -102,6 +102,13 @@ svg { width: 15px; height: 15px; fill: none; stroke: currentColor; stroke-width:
 :host([data-theme="light"]) .search-trigger {background:#fcf9f3;color:#73565f;border-color:#79636b38;}
 
 .search-panel { letter-spacing: -.005em; }
+.passage { position:fixed; top:144px; left:50%; transform:translateX(-50%); width:560px; max-width:calc(100vw - 24px); padding:12px 14px 14px; border-radius:18px; border:1px solid #dcd0c6; background:#fcf9f3; color:#342b30; color-scheme:light; box-shadow:0 16px 56px #0006; pointer-events:auto; animation:appear 140ms ease-out; }
+.passage .preview-header { padding:0 0 8px; }
+.passage .preview-title { color:#735b40; }
+.passage .close { color:#7c6971; font-size:20px; }
+.passage .close:hover { color:#342b30; background:#f0e3e1; }
+.passage-text mark { color:#5b482b; background:#eee1bd; border-radius:2px; }
+.passage-text { margin:0; max-height:min(220px, 36vh); overflow-y:auto; overscroll-behavior:contain; white-space:pre-wrap; font-size:13px; line-height:1.5; }
 .search-input { font-weight: 400; letter-spacing: inherit; }
 .search-results h3 { letter-spacing: .015em; }
 .search-result-label { font-weight: 500; line-height: 1.5; }

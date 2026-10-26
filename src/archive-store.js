@@ -11,7 +11,7 @@ const chatRange = url => IDBKeyRange.bound(`${url}::`,`${url}::￿`);
 let connection;
 export function archiveDB() {
   if (!connection) connection = new Promise((resolve, reject) => {
-    const request = indexedDB.open('threadrail-library', 4);
+    const request = indexedDB.open('threadrail-library', 5);
     request.onupgradeneeded = event => {
       const db=request.result;
       if(!db.objectStoreNames.contains('chats'))db.createObjectStore('chats', {keyPath:'url'});
@@ -24,6 +24,7 @@ export function archiveDB() {
       }
       const chats=request.transaction.objectStore('chats');
       if(!chats.indexNames.contains('updatedAt'))chats.createIndex('updatedAt','updatedAt');
+      if(!db.objectStoreNames.contains('exact'))db.createObjectStore('exact',{keyPath:'key'}).createIndex('usedAt','usedAt');
     };
     request.onsuccess = () => { request.result.onversionchange = () => {request.result.close();connection=null;};resolve(request.result); };
     request.onerror = () => {connection=null;reject(request.error);};
@@ -67,7 +68,9 @@ export async function saveChat(snapshot) {
 export async function forgetChats(url) {
   const db=await archiveDB();
   return new Promise((resolve,reject)=>{
-    const transaction=db.transaction(['chats','vectors','meta'],'readwrite');
+    const transaction=db.transaction(['chats','vectors','exact','meta'],'readwrite');
+    // The exact-vector cache is keyed by text, not chat, so any removal clears it.
+    transaction.objectStore('exact').clear();
     if(url) {
       transaction.objectStore('meta').put(Date.now(),`forgot:${url}`);
       transaction.objectStore('chats').delete(url);
@@ -77,6 +80,42 @@ export async function forgetChats(url) {
       if(globalThis.chrome?.runtime?.id)chrome.runtime.sendMessage({type:'threadrail:library-forgotten',url,at:Date.now()}).catch(()=>{}).finally(resolve);
       else resolve();
     };transaction.onerror=()=>reject(transaction.error);
+  });
+}
+// Exact vectors of pieces that searches had to recheck, so repeat searches can
+// reuse them instead of running the model again. A bounded cache: the least
+// recently used entries go first, and it holds one model version only.
+export const EXACT_LIMIT=32768;
+export async function readExact(keys){
+  const db=await archiveDB();
+  return new Promise((resolve,reject)=>{
+    const transaction=db.transaction(['exact','meta'],'readwrite'),store=transaction.objectStore('exact'),found=new Map();
+    const version=transaction.objectStore('meta').get('exactVersion');
+    version.onsuccess=()=>{
+      if(version.result!==SEARCH_MODEL.embeddingVersion)return;
+      const now=Date.now();
+      for(const key of new Set(keys)){const get=store.get(key);get.onsuccess=()=>{if(get.result){found.set(key,get.result.vector);store.put({...get.result,usedAt:now});}};}
+    };
+    transaction.oncomplete=()=>resolve(found);transaction.onerror=()=>reject(transaction.error);
+  });
+}
+export async function writeExact(records,{limit=EXACT_LIMIT}={}){
+  const db=await archiveDB();
+  return new Promise((resolve,reject)=>{
+    const transaction=db.transaction(['exact','meta'],'readwrite'),store=transaction.objectStore('exact'),meta=transaction.objectStore('meta');
+    const version=meta.get('exactVersion');
+    version.onsuccess=()=>{
+      if(version.result!==SEARCH_MODEL.embeddingVersion){store.clear();meta.put(SEARCH_MODEL.embeddingVersion,'exactVersion');}
+      const now=Date.now();
+      for(const record of records)store.put({key:record.key,vector:Float32Array.from(record.vector),usedAt:now});
+      const count=store.count();
+      count.onsuccess=()=>{
+        let excess=count.result-limit;if(excess<=0)return;
+        const cursor=store.index('usedAt').openCursor();
+        cursor.onsuccess=()=>{const row=cursor.result;if(!row||excess<=0)return;row.delete();excess--;row.continue();};
+      };
+    };
+    transaction.oncomplete=resolve;transaction.onerror=()=>reject(transaction.error);
   });
 }
 // Saved vectors ({id,textKey,scale,q}) of one chat, or of all chats; none when

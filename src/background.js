@@ -1,6 +1,20 @@
 import { installArchiveMessages } from './archive-background.js';
 import { embeddings,rerank } from './embedding-engine.js';
 import { BUILTIN_ORIGINS } from './extension-api.js';
+import { readExact,writeExact } from './archive-store.js';
+import { vectorTextKey } from './search-index.js';
+
+// Exact rechecks reuse vectors cached by earlier searches; one-at-a-time
+// embedding makes a cached vector identical to recomputing it. Nothing is
+// cached from private windows or while saving is paused.
+async function embedTexts(texts,base,priority,{recheck=false,persist=false}={}){
+  if(!recheck)return embeddings(texts,base,priority);
+  const keys=texts.map(vectorTextKey),cached=await readExact(keys).catch(()=>new Map());
+  const missing=[...new Set(texts.filter((text,i)=>!cached.has(keys[i])))];
+  const computed=missing.length?await embeddings(missing,base,priority):[],fresh=new Map(missing.map((text,i)=>[text,computed[i]]));
+  if(persist&&missing.length)writeExact(missing.map((text,i)=>({key:vectorTextKey(text),vector:computed[i]}))).catch(()=>{});
+  return texts.map((text,i)=>cached.has(keys[i])?Array.from(cached.get(keys[i])):fresh.get(text));
+}
 
 let registration = Promise.resolve();
 function syncSites() {
@@ -37,7 +51,11 @@ chrome.runtime.onMessage.addListener((message, sender, respond) => {
       (ranking&&(typeof message.query!=='string'||message.query.length>20000))) {
     respond({ error: 'Invalid search batch' }); return;
   }
-  (ranking?rerank(message.query,texts,chrome.runtime.getURL('')).then(scores=>({scores})):embeddings(texts,chrome.runtime.getURL(''),message.priority?1:0).then(vectors=>({vectors})))
+  const embed=async()=>{
+    const {libraryPaused=false}=await chrome.storage.local.get('libraryPaused');
+    return embedTexts(texts,chrome.runtime.getURL(''),message.priority?1:0,{recheck:message.recheck===true,persist:!sender.tab?.incognito&&!libraryPaused});
+  };
+  (ranking?rerank(message.query,texts,chrome.runtime.getURL('')).then(scores=>({scores})):embed().then(vectors=>({vectors})))
     .then(respond).catch(error => respond({error:error.message}));
   return true;
 });

@@ -34,7 +34,7 @@ test('vectors are stored compressed with a guaranteed range, per chat, for one m
     await store.forgetChats(url);
     const afterForget=(await store.readVectors(url)).length,otherKept=(await store.readVectors(other)).length;
     // A different model version makes saved vectors unusable: none are returned.
-    const raw2=await new Promise(resolve=>{const r=indexedDB.open('threadrail-library',4);r.onsuccess=()=>resolve(r.result);});
+    const raw2=await new Promise(resolve=>{const r=indexedDB.open('threadrail-library');r.onsuccess=()=>resolve(r.result);});
     await new Promise(resolve=>{const tx=raw2.transaction('meta','readwrite');tx.objectStore('meta').put('older-model','vectorVersion');tx.oncomplete=resolve;});raw2.close();
     const afterVersionChange=(await store.readVectors()).length;
     return {oldVectorsDropped,chatsKept,count:records.length,fields:Object.keys(record).sort(),bytes:record.q instanceof Int8Array&&record.q.length===384,
@@ -51,4 +51,29 @@ test('vectors are stored compressed with a guaranteed range, per chat, for one m
   expect(proof.urls).toEqual(['https://chatgpt.com/c/compact','https://claude.ai/chat/other']);
   expect(proof.afterForget).toBe(0);expect(proof.otherKept).toBe(1);
   expect(proof.afterVersionChange).toBe(0);
+});
+
+test('rechecked exact vectors are cached exactly, least recently used first out, and cleared with the library or a new model',async({page})=>{
+  await page.goto('/');
+  const proof=await page.evaluate(async()=>{
+    await new Promise(resolve=>{const request=indexedDB.deleteDatabase('threadrail-library');request.onsuccess=request.onerror=request.onblocked=resolve;});
+    const store=await import('/src/archive-store.js'),wait=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+    const vector=seed=>Array.from({length:384},(_,i)=>Math.fround(Math.sin(i*seed)/20));
+    await store.writeExact([{key:'a',vector:vector(1)},{key:'b',vector:vector(2)}],{limit:3});await wait(5);
+    const first=await store.readExact(['a','missing']);
+    const exact=first.get('a') instanceof Float32Array&&first.get('a').every((n,i)=>n===vector(1)[i]);
+    await wait(5);await store.readExact(['a']);await wait(5);              // a is now used more recently than b
+    await store.writeExact([{key:'c',vector:vector(3)},{key:'d',vector:vector(4)}],{limit:3});
+    const afterLimit=[...(await store.readExact(['a','b','c','d'])).keys()].sort();
+    const db=await new Promise(resolve=>{const r=indexedDB.open('threadrail-library');r.onsuccess=()=>resolve(r.result);});
+    await new Promise(resolve=>{const tx=db.transaction('meta','readwrite');tx.objectStore('meta').put('older-model','exactVersion');tx.oncomplete=resolve;});db.close();
+    const afterVersion=(await store.readExact(['a','c','d'])).size;
+    await store.writeExact([{key:'e',vector:vector(5)}]);
+    await store.forgetChats('https://chatgpt.com/c/anything');
+    const afterForget=(await store.readExact(['e'])).size;
+    return {exact,missingAbsent:!first.has('missing'),afterLimit,afterVersion,afterForget};
+  });
+  expect(proof.exact).toBe(true);expect(proof.missingAbsent).toBe(true);
+  expect(proof.afterLimit).toEqual(['a','c','d']);
+  expect(proof.afterVersion).toBe(0);expect(proof.afterForget).toBe(0);
 });

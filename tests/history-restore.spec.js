@@ -43,10 +43,27 @@ const topBatches=`<script>requestAnimationFrame(()=>requestAnimationFrame(()=>{
     setTimeout(()=>{const before=scroll.scrollHeight;list.prepend(...hidden.splice(-40));scroll.scrollTop+=scroll.scrollHeight-before;loading=false;},700);
   });
 }));</script></body>`;
+// Both at once, as on a very long Claude chat: older rows arrive in batches at
+// the top, and only rows near the viewport are drawn.
+const virtualBatches=`<script>requestAnimationFrame(()=>requestAnimationFrame(()=>{
+  const scroll=document.querySelector('#scroll'),list=document.querySelector('[data-testid="transcript-list"]'),all=[...list.children];
+  // The host keeps the reading position itself when a batch arrives, so the
+  // browser's own scroll anchoring must not shift it a second time.
+  scroll.style.overflowAnchor='none';
+  const content=new Map(all.map(row=>[row,row.innerHTML]));
+  for(const row of all){row.style.height=row.getBoundingClientRect().height+'px';row.style.boxSizing='border-box';}
+  const hidden=all.slice(0,-40);hidden.forEach(row=>row.remove());
+  const render=()=>{const box=scroll.getBoundingClientRect();for(const row of list.children){const r=row.getBoundingClientRect(),inside=r.bottom>box.top-1200&&r.top<box.bottom+1200;
+    if(inside&&!row.childElementCount)row.innerHTML=content.get(row);else if(!inside&&row.childElementCount)row.innerHTML='';}};
+  scroll.scrollTop=scroll.scrollHeight;render();let loading=false;
+  scroll.addEventListener('scroll',()=>{render();if(scroll.scrollTop>5||loading||!hidden.length)return;loading=true;
+    setTimeout(()=>{const before=scroll.scrollHeight;list.prepend(...hidden.splice(-80));scroll.scrollTop+=scroll.scrollHeight-before;render();loading=false;},700);});
+}));</script></body>`;
 const cases=[
   {provider:'chatgpt',url:'https://chatgpt.com/c/history-restore',count:30,target:4,hard:wheelHistory},
   {provider:'claude',url:'https://claude.ai/chat/history-restore',count:250,target:242,hard:virtualized},
   {provider:'claude',url:'https://claude.ai/chat/history-start',count:200,target:1,hard:topBatches,name:'its first answer, behind batches of older history'},
+  {provider:'claude',url:'https://claude.ai/chat/history-middle',count:300,target:150,hard:virtualBatches,name:'a passage in the middle of a long virtualized chat'},
 ];
 for(const {provider,url,count,target,hard,name='a saved passage outside the drawn history'} of cases)test(`${provider}: ${name} is restored without a manual scroll`,async()=>{
   test.setTimeout(120000);
@@ -73,7 +90,10 @@ for(const {provider,url,count,target,hard,name='a saved passage outside the draw
     await page.keyboard.press('Alt+Shift+f');await page.locator('.search-input').fill('quillfeather');
     const group=await expandWord(page,'quillfeather');
     await group.locator('.search-result').first().click();
+    // The saved text is readable at once, before the host has loaded it.
+    await expect(page.locator('.passage-text')).toContainText('quillfeather harbor',{timeout:1000});
     await expect(page.locator('.toast')).toContainText('matching passage',{timeout:45000});
+    await expect(page.locator('.passage')).toBeHidden();
     const top=await page.locator('#target').evaluate(el=>el.getBoundingClientRect().top);
     expect(top).toBeGreaterThanOrEqual(60);expect(top).toBeLessThan(500);
     if(provider==='chatgpt')expect(await page.evaluate(()=>window.wheelLoads)).toBeGreaterThan(0);

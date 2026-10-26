@@ -1,5 +1,6 @@
 import css from './rail.css';
 import { clamp } from './model.js';
+import { locateText } from './message-text.js';
 import { renderSearchColumns, resetSearchColumns } from './search-results-view.js';
 
 const chevron = direction => `<svg viewBox="0 0 20 20" aria-hidden="true"><path d="${direction === 'up' ? 'm5 12 5-5 5 5' : 'm5 8 5 5 5-5'}"/></svg>`;
@@ -38,11 +39,17 @@ export class RailUI {
         <button class="search-library">All chats <span aria-hidden="true">↗</span></button>
         <div class="search-library-error" role="alert" hidden></div>
       </section>
+      <section class="passage" aria-label="Saved passage" hidden>
+        <div class="preview-header"><span class="preview-title">Saved passage</span><button class="passage-close close" aria-label="Close saved passage">×</button></div>
+        <p class="passage-text"></p>
+      </section>
       <div class="toast" hidden><svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10" r="8"/><path d="m6 10 3 3 5-6"/></svg><span></span><button class="toast-action" hidden></button></div>
       <div class="highlight" hidden></div><div class="live" role="status" aria-live="polite" aria-atomic="true"></div>`;
     this.shadow.append(wrapper);
     for (const name of ['rail', 'track', 'preview', 'items', 'toast', 'highlight', 'live']) this[name] = this.shadow.querySelector(`.${name}`);
     this.searchPanel = this.shadow.querySelector('.search-panel');
+    this.passage = this.shadow.querySelector('.passage');
+    this.shadow.querySelector('.passage-close').addEventListener('click', () => this.hidePassage());
     this.searchInput = this.shadow.querySelector('.search-input');
     this.searchResults = this.shadow.querySelector('.search-results');
     this.shadow.querySelector('.search-trigger').addEventListener('click', () => callbacks.onSearchOpen());
@@ -297,7 +304,31 @@ export class RailUI {
     if(!persistent)this.toastTimer = setTimeout(() => { this.toast.hidden = true; }, 3500);
   }
 
+  // The saved text of a passage being restored, readable at once while the
+  // host loads its older history. It never takes focus.
+  // Shown with its paragraph from the saved message, since a word match
+  // carries only the word itself.
+  showPassage({sourceText, matchText, matchOffset}) {
+    const text = sourceText || matchText;
+    const found = text.startsWith(matchText, matchOffset) ? {start:matchOffset, length:matchText.length} : locateText(text, matchText);
+    const element = this.passage.querySelector('.passage-text');
+    if (!found) element.textContent = matchText;
+    else {
+      const end = found.start + found.length;
+      let from = text.lastIndexOf('\n', found.start - 1) + 1, to = text.indexOf('\n', end);
+      if (to < 0) to = text.length;
+      if (found.start - from > 400) from = text.indexOf(' ', found.start - 400) + 1 || found.start;
+      if (to - end > 400) to = text.lastIndexOf(' ', end + 400) > end ? text.lastIndexOf(' ', end + 400) : end;
+      const mark = document.createElement('mark'); mark.textContent = text.slice(found.start, end);
+      element.replaceChildren(`${from > 0 ? '…' : ''}${text.slice(from, found.start)}`, mark, `${text.slice(end, to)}${to < text.length ? '…' : ''}`);
+    }
+    this.passage.hidden = false;
+  }
+
+  hidePassage() { this.passage.hidden = true; }
+
   openSearch(query = '') {
+    this.hidePassage();
     this.setLibraryError('');
     this.closePreview();
     this.searchPanel.hidden = false;

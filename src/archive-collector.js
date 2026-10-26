@@ -107,17 +107,18 @@ export class ArchiveCollector {
       }
       if(!controller.liveSearchSources?.length)throw new Error('No messages were readable. Check sign-in and open this chat normally.');
       if(target&&(matched=this.matching(target)))return {matched};
-      await this.capture(true);
+      this.capture(true).catch(()=>{});
       // Nothing older arrives and the host shows no loader or older-history button.
       const historySignature=()=>`${controller.scroller.scrollHeight}|${fingerprint((controller.liveSearchSources??[]).map(s=>s.id+s.text).join('|'))}`;
       const historyPending=()=>controller.adapter.historyLoading(controller.root,controller.scroller)||!!controller.adapter.olderHistoryControl(controller.root);
       let quiet=0,last='';
-      // Where the passage sits in the saved conversation decides which end to
-      // search from. Either way the whole chat is still covered.
+      // Where the passage sits in the saved conversation (0 = first message,
+      // 1 = latest) decides where to search first. Either way the whole chat
+      // is still covered.
       const saved=controller.threadHistory?.messages??[];
       const position=target?saved.findIndex(m=>m.key===target.messageKey||(target.nativeId&&m.nativeId===target.nativeId)):-1;
-      const nearStart=position>=0&&saved.length>1&&position/(saved.length-1)<.5;
-      if(target&&!nearStart){
+      const fraction=position>=0&&saved.length>1?position/(saved.length-1):null;
+      if(target&&(fraction===null||fraction>=.75)){
         // Search outward from where the chat opened. Virtualized hosts draw only
         // rows near the viewport, so a passage just above the opening position
         // is found within a few steps instead of after a walk down the whole
@@ -137,19 +138,30 @@ export class ArchiveCollector {
         }
         if(active())controller.scroller.scrollTo({top:Math.max(0,controller.scroller.scrollHeight-fromBottom),behavior:'instant'});
       }else{
-        // Indexing, or a passage in the older half: stay at the top and take
-        // each batch of older history as the host delivers it (hosts load the
-        // next batch only while the top is in view), then walk forward.
+        // Indexing, or a passage before the newest quarter: stay at the top and
+        // take each batch of older history as the host delivers it (hosts load
+        // the next batch only while the top is in view).
+        let probed=false;
         while(active()){
           controller.scroller.scrollTo({top:0,behavior:'instant'});
           controller.adapter.requestOlderHistory(controller.root,controller.scroller);
-          await pause(500);visited++;
-          if(target){if(matched=this.matching(target))return {matched};}
+          await this.batchArrival(()=>controller.scroller.scrollHeight,historyPending);visited++;
+          if(target){
+            if(matched=this.matching(target))return {matched};
+            // Once the oldest drawn message is at or before the passage, the
+            // passage is loaded: look for it now instead of loading the rest of
+            // the history first. If that look fails, loading goes on as before.
+            const loaded=!probed&&this.loadedFraction(target);
+            if(loaded){probed=true;if(matched=await this.probeFrom(loaded.fraction,target,active))return {matched};last='';quiet=0;continue;}
+          }
           else{controller.refresh();await this.capture();}
           const signature=historySignature();
           quiet=signature===last&&!historyPending()?quiet+1:0;last=signature;
           if(quiet>=4)break;
         }
+        // With the whole history loaded, look where the passage should be:
+        // the same fraction of the transcript as of the saved conversation.
+        if(target&&active()&&(matched=await this.probeFrom(fraction,target,active)))return {matched};
       }
       quiet=0;
       while(active()){
@@ -170,6 +182,59 @@ export class ArchiveCollector {
       return {ok:!this.cancelled,partial:true,visited,cancelled:this.cancelled};
     }finally{this.scanning=false;this.finding=false;this.manualIndex=false;}
   }
+  // Wait up to half a second for the host's next batch of older history:
+  // return as soon as it has arrived and stopped changing.
+  async batchArrival(signature,pending,limit=500){
+    const began=Date.now(),first=signature();let last=first,stable=Date.now();
+    while(Date.now()-began<limit){
+      await pause(50);
+      const now=signature();if(now!==last){last=now;stable=Date.now();}
+      if(last!==first&&!pending()&&Date.now()-stable>=100)return true;
+    }
+    return last!==first;
+  }
+  // Where the passage sits among the loaded messages, once the oldest drawn
+  // message is at or before it in the saved conversation; otherwise null.
+  loadedFraction(target){
+    const controller=this.controller,messages=controller.threadHistory?.messages??[];
+    const index=new Map(messages.map((m,i)=>[m.key,i]));
+    const position=messages.findIndex(m=>m.key===target.messageKey||(target.nativeId&&m.nativeId===target.nativeId));
+    const drawn=[...controller.threadHistory.live.keys()].map(key=>index.get(key)).filter(Number.isInteger);
+    if(position<0||!drawn.length)return null;
+    const oldest=Math.min(...drawn),last=messages.length-1;
+    if(oldest>position)return null;
+    return {fraction:last>oldest?(position-oldest)/(last-oldest):0};
+  }
+  // Search outward from an estimated place, alternating up and down. Each probe
+  // covers every message the host has drawn around the viewport, and the next
+  // probe starts where that coverage ends, so no part is skipped. In a very
+  // long transcript this reaches a passage in the middle without walking to
+  // it from either end.
+  async probeFrom(fraction,target,active){
+    const controller=this.controller,selector=`${controller.profile.user}, ${controller.profile.assistant}`;
+    const covered=()=>{
+      const scroller=controller.scroller,viewport=controller.adapter.viewport(scroller),top=scroller.scrollTop;
+      const rects=[...controller.root.querySelectorAll(selector)].filter(node=>visible(node)&&!node.parentElement?.closest(selector))
+        .map(node=>controller.adapter.anchor(node).getBoundingClientRect());
+      return [Math.min(top,...rects.map(r=>r.top-viewport.top+top)),Math.max(top+viewport.height,...rects.map(r=>r.bottom-viewport.top+top))];
+    };
+    const scroller=controller.scroller,end=()=>Math.max(0,scroller.scrollHeight-scroller.clientHeight);
+    scroller.scrollTo({top:Math.max(0,(fraction??1)*end()-scroller.clientHeight/2),behavior:'instant'});
+    await pause(300);
+    let matched=this.matching(target);if(matched)return matched;
+    let [low,high]=covered(),upward=true;
+    while(active()&&(low>0||high<scroller.scrollHeight)){
+      const up=low>0&&(high>=scroller.scrollHeight||upward);upward=!upward;
+      scroller.scrollTo({top:up?Math.max(0,low-scroller.clientHeight+40):Math.min(end(),high-40),behavior:'instant'});
+      await pause(250);
+      if(matched=this.matching(target))return matched;
+      const [a,b]=covered(),grew=a<low||b>high;
+      low=Math.min(low,a);high=Math.max(high,b);
+      // Nothing new drawn there: move on by a screen so the probe still advances.
+      if(!grew){if(up)low=Math.max(0,low-scroller.clientHeight);else high+=scroller.clientHeight;}
+    }
+    return null;
+  }
   async jump(target){
     target=passageTarget(target);
     this.landingProof=null;
@@ -179,8 +244,11 @@ export class ArchiveCollector {
     const anchorTop=anchor?.element.getBoundingClientRect().top;
     controller.setState(State.JUMPING);
     controller.ui.announce('Finding saved passage…',{persistent:true,action:'Cancel',onAction:()=>this.cancel({restore:true})});
+    // Show the saved text right away; it stays if the passage cannot be opened.
+    controller.ui.showPassage(target);
     try{
     const result=await this.scan(target);
+    if(result.matched||result.cancelled)controller.ui.hidePassage();
     if(result.matched){
       const evidence=controller.adapter.sourceEvidence(result.matched.element,target.sourceText);
       if(!evidence.unchanged){controller.ui.announce('This message changed. Search again.');return {ok:false,reason:'Original message text changed',...evidence};}

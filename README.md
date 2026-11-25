@@ -2,6 +2,8 @@
 
 Find your place, faster. Private conversation navigation for ChatGPT, Claude, Gemini, and other chat websites you enable.
 
+https://github.com/user-attachments/assets/4998bccd-cfb7-416f-ba5b-0795b259a914
+
 If you've ever had a long conversation with ChatGPT, Claude, or Gemini, you've probably experienced the frustration of trying to find something you discussed earlier. Maybe it was an answer you wanted to revisit, an idea you had been working through, or a small detail buried somewhere in hundreds of messages. You remember having the conversation, sometimes even what was said, but finding it again means scrolling endlessly and hoping you recognise it along the way.
 
 I built ThreadRail to make that a little easier. It's a free, open-source browser extension for Chrome and Edge that adds a slim rail to the right side of your conversations, with a small mark for every question you've asked. You can hover over any mark to see a preview, click to jump straight to that part of the conversation, or use the buttons to return to the very beginning or the latest message. It stays out of your way until you need it.
